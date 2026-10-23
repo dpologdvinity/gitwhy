@@ -414,12 +414,20 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			return run("file-history", recipe.Answers{"file": f.path}), true
 		}
 	case tabCommits:
+		gc := m.commitAt(i)
 		if k == "a" {
 			m.all = !m.all
 			m.load()
+			if gc != nil { // keep the same commit selected
+				for j := 0; j < m.count(tabCommits); j++ {
+					if m.commitAt(j).ID == gc.ID {
+						m.cursor[tabCommits] = j
+						break
+					}
+				}
+			}
 			return Action{}, false
 		}
-		gc := m.commitAt(i)
 		if gc == nil {
 			return Action{}, false
 		}
@@ -430,6 +438,10 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 		}
 		switch k {
 		case "p":
+			if m.repo.OK("merge-base", "--is-ancestor", gc.ID, "HEAD") {
+				m.msg = "That commit is already on your branch."
+				return Action{}, false
+			}
 			return run("copy-commit", recipe.Answers{"from": gc.ID, "commit": gc.ID}), true
 		case "r":
 			return run("reword-commit", c), true
