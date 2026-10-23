@@ -194,11 +194,15 @@ func (m *model) hunkDetail(w, h int) []string {
 	}
 	rows := make([]string, len(lines))
 	for i, l := range lines {
-		mark := "  "
-		if v.sel[i] {
-			mark = "▌ "
+		// Plain text, so it stays readable on the highlighted cursor row.
+		mark := "    "
+		if l[0] == '+' || l[0] == '-' {
+			mark = "[ ] "
+			if v.sel[i] {
+				mark = "[x] "
+			}
 		}
-		rows[i] = mark + colorDiff(l, w-2, 1)[0]
+		rows[i] = mark + colorDiff(l, w-4, 1)[0]
 	}
 	return scroll(rows, v.line, w, h)
 }
