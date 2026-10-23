@@ -52,8 +52,41 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 ## Install
 
-Needs git 2.38+. Linux, WSL and Windows (Git Bash or PowerShell, CI-tested) work; macOS builds but is untested.
-On Windows, with [Scoop](https://scoop.sh):
+Needs git 2.38+. Tested on Linux, WSL and Windows (CI); macOS builds but is untested.
+
+### Linux and macOS
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
+```
+
+This downloads the latest [release](https://github.com/dpologdvinity/gitwhy/releases), checks its
+checksum, and puts `gitwhy` in `~/.local/bin`. Or with Homebrew:
+
+```sh
+brew install dpologdvinity/gitwhy/gitwhy
+```
+
+### Debian, Ubuntu (apt)
+
+```sh
+sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.asc -o /etc/apt/keyrings/gitwhy.asc
+echo "deb [signed-by=/etc/apt/keyrings/gitwhy.asc] https://dpologdvinity.github.io/gitwhy/apt ./" | sudo tee /etc/apt/sources.list.d/gitwhy.list
+sudo apt update && sudo apt install gitwhy
+```
+
+### Fedora, RHEL (dnf)
+
+```sh
+sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.repo -o /etc/yum.repos.d/gitwhy.repo
+sudo dnf install gitwhy
+```
+
+Each release also has `.deb`, `.rpm`, `.apk` (Alpine) and `.pkg.tar.zst` (Arch) files you can install directly.
+
+### Windows
+
+With [Scoop](https://scoop.sh):
 
 ```powershell
 scoop bucket add gitwhy https://github.com/dpologdvinity/homebrew-gitwhy
@@ -68,40 +101,26 @@ irm https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.ps1 | ie
 
 Or download the zip from the [releases](https://github.com/dpologdvinity/gitwhy/releases) page.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
-```
-
-**Debian, Ubuntu** (apt):
+### npm or bun (Node 18+)
 
 ```sh
-sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.asc -o /etc/apt/keyrings/gitwhy.asc
-echo "deb [signed-by=/etc/apt/keyrings/gitwhy.asc] https://dpologdvinity.github.io/gitwhy/apt ./" | sudo tee /etc/apt/sources.list.d/gitwhy.list
-sudo apt update && sudo apt install gitwhy
+npm i -g @kaitlynbassford/gitwhy    # or: bun add -g @kaitlynbassford/gitwhy
+npx @kaitlynbassford/gitwhy         # to try it once
 ```
 
-**Fedora, RHEL** (dnf):
+The command is still `gitwhy`. The binary is downloaded from the release and checked against its
+checksum, at install or on first run.
 
-```sh
-sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.repo -o /etc/yum.repos.d/gitwhy.repo
-sudo dnf install gitwhy
-```
-
-Each release also has `.deb`, `.rpm`, `.apk` (Alpine) and `.pkg.tar.zst` (Arch) files you can install directly.
-
-**Nix** (builds from source; `gitwhy version` shows the commit):
+### Nix
 
 ```sh
 nix run github:dpologdvinity/gitwhy
 nix profile install github:dpologdvinity/gitwhy
 ```
 
-Or with Homebrew: `brew install dpologdvinity/gitwhy/gitwhy`. Or with npm or bun (Node 18+):
-`npm i -g @kaitlynbassford/gitwhy` / `bun add -g @kaitlynbassford/gitwhy`, or `npx @kaitlynbassford/gitwhy` to try it (the command is still `gitwhy`). The binary is downloaded from the
-release and checked against its checksum, at install or on first run.
+This builds from source, so `gitwhy version` shows the commit instead of a version number.
 
-That downloads the latest [release](https://github.com/dpologdvinity/gitwhy/releases), checks its
-checksum, and puts `gitwhy` in `~/.local/bin`. Or build from source (Go 1.24+):
+### From source (Go 1.26+)
 
 ```sh
 git clone https://github.com/dpologdvinity/gitwhy && cd gitwhy
