@@ -1,6 +1,6 @@
 # git history
 
-Experimental: edit one past commit and auto-replay the commits after it. Simpler than `git rebase -i` for single fixes. Moves every local branch built on the changed commit by default.
+Experimental: edit one past commit and auto-replay the commits after it. Simpler than `git rebase -i` for single fixes. Moves every local branch built on the changed commit by default. Rewrites commit IDs: already-pushed commits then need a force-push.
 
 Unlike [`git rebase`](rebase.md): most subcommands work in bare repos (no working tree; `fixup` reads the index), no hooks. Can't handle merge commits (use `git rebase --rebase-merges`) or conflicts: a conflicting replay errors and changes nothing.
 

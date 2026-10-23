@@ -4,7 +4,7 @@ Read and change settings. Names are `<section>.<key>` (`user.name`) or `<section
 
 Reads system, global, local, and worktree files; last found wins. Writes local unless a location flag says otherwise.
 
-Exit codes: 1 bad section/key (or `get` found nothing), 2 no section or name, 3 invalid config file, 4 can't write, 5 unsetting missing or multiple matching lines, 6 bad regex.
+Exit codes: 1 bad section/key (or `get` found nothing), 2 no section or name, 3 invalid config file, 4 can't write, 5 unsetting a missing setting, or set/unset hitting multiple lines, 6 bad regex.
 
 **Usage:** `git config <subcommand> [<flags>]`
 
@@ -14,8 +14,8 @@ Exit codes: 1 bad section/key (or `get` found nothing), 2 no section or name, 3 
 |------------|--------------|
 | `list` | Show all settings. |
 | `get <name>` | Print a value (last if multiple). Exit 1 if unset. |
-| `set <name> <value>` | Set a value. Multi-line settings need `--all`, `--value`, or `--append`. |
-| `unset <name>` | Remove a setting. Multi-line settings need `--all` or `--value`. |
+| `set <name> <value>` | Set a value. Multi-valued settings need `--all`, `--value`, or `--append`. |
+| `unset <name>` | Remove a setting. Multi-valued settings need `--all` or `--value`. |
 | `rename-section <old-name> <new-name>` | Rename a section (`remote.old` to `remote.new`). |
 | `remove-section <name>` | Delete a section. |
 | `edit` | Open the file in your editor. |
@@ -95,7 +95,7 @@ For `--type=<type>`. `--no-type` cancels.
 
 | Type | Meaning |
 |------|---------|
-| `bool` | `true`/`yes`/`on`/positive number = `true`; `false`/`no`/`off`/`0` = `false`. |
+| `bool` | `true`/`yes`/`on`/nonzero number = `true`; `false`/`no`/`off`/`0` = `false`. |
 | `int` | Decimal; `k`, `m`, `g` multiply by 1024, 1024², 1024³. |
 | `bool-or-int` | Either. |
 | `bool-or-str` | Boolean, else any text. |

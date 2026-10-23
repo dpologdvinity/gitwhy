@@ -10,7 +10,7 @@ Go before the subcommand.
 
 | Flag | What it does |
 |------|--------------|
-| `--[no-]object-dir=<dir>` | Use objects in `<dir>` (must be an alternate). Reads `<dir>/packs/`. |
+| `--[no-]object-dir=<dir>` | Use objects in `<dir>` (must be an alternate). Reads `<dir>/pack/`. |
 | `--[no-]progress` | Force progress on/off. Default: on for a terminal. For `write`, `verify`, `expire`, `repack`. |
 
 ## Subcommands

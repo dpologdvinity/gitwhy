@@ -306,3 +306,62 @@ func TestSparseCheckoutUndo(t *testing.T) {
 		t.Fatalf("status = %q", st)
 	}
 }
+
+func TestLFSFilesRoundTrip(t *testing.T) {
+	if _, err := (git.Runner{}).Output("lfs", "version"); err != nil {
+		t.Skip("git-lfs not installed")
+	}
+	r := testrepo.New(t)
+	home := t.TempDir()
+	r.Runner = r.With("HOME="+home, "GIT_CONFIG_GLOBAL="+filepath.Join(home, "gitconfig"))
+	r.Git("lfs", "install", "--local", "--skip-repo") // filters only; test repos have no hooks dir
+	r.Git("lfs", "track", "*.bin")
+	r.Commit("lfs", "big.bin", "binary v1\n")
+	if ptr := r.Git("cat-file", "-p", "HEAD:big.bin"); !strings.Contains(ptr, "git-lfs") {
+		t.Fatalf("not stored as LFS pointer: %q", ptr)
+	}
+	r.Write("big.bin", "binary v2 unstaged\n")
+	r.Write("new.bin", "new untracked lfs\n")
+	before := r.State()
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("reset", "-q", "--hard")
+	r.Git("clean", "-fdq")
+	if _, err := Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Read("big.bin"); got != "binary v2 unstaged\n" {
+		t.Fatalf("big.bin = %q (pointer instead of content?)", got)
+	}
+	if got := r.Read("new.bin"); got != "new untracked lfs\n" {
+		t.Fatalf("new.bin = %q", got)
+	}
+	if after := r.State(); after != before {
+		t.Fatalf("state differs\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestAutoCRLFRoundTrip(t *testing.T) {
+	r := testrepo.New(t)
+	r.Git("config", "core.autocrlf", "true")
+	r.Commit("one", "a.txt", "line1\r\nline2\r\n")
+	r.Write("a.txt", "edited1\r\nedited2\r\n")
+	r.Write("b.txt", "new\r\n")
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("reset", "-q", "--hard")
+	r.Git("clean", "-fdq")
+	if _, err := Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Read("a.txt"); got != "edited1\r\nedited2\r\n" {
+		t.Fatalf("a.txt = %q", got)
+	}
+	if got := r.Read("b.txt"); got != "new\r\n" {
+		t.Fatalf("b.txt = %q", got)
+	}
+}

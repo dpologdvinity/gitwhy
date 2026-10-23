@@ -13,7 +13,7 @@ Default line: `<mode> <type> <id> TAB <path>` (valid `git update-index --index-i
 | Flag | What it does |
 |------|--------------|
 | `<tree-ish>` | Commit, tag, or tree, e.g. `HEAD`, `main:src`. |
-| `[<path>...]` | Only matching entries. Default: top level. |
+| `[<path>...]` | Only matching entries. Default: current folder's entries (top level at repo root). |
 | `-d` | Only folder entries, not their contents. Implies `-t`. |
 | `-r` | Recurse into subfolders. |
 | `-t` | With `-r`, also list folders. |

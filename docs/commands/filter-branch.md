@@ -27,7 +27,7 @@ Filters run in the order below via shell `eval` (except `--commit-filter`). `GIT
 | `--prune-empty` | Drop non-merge commits that end up empty. Not with `--commit-filter` (use `git_commit_non_empty_tree`). |
 | `--original <namespace>` | Where old refs go. Default `refs/original`. |
 | `-d <directory>` | Temp folder. Default `.git-rewrite/`. tmpfs speeds it up. |
-| `-f`, `--force` | Run even if the temp folder or `refs/original/` exists. |
+| `-f`, `--force` | Run even if the temp folder or `refs/original/` exists. Overwrites earlier backups there. |
 | `--state-branch <branch>` | Load and save the old-to-new ID map here for incremental runs. Created if missing. |
 
 ## Examples

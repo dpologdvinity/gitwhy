@@ -97,6 +97,17 @@ func (ix *Index) Search(query string, n int) []Result {
 		out = append(out, r)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	// Keep weak command/flag hits out when recipes match well: they read as noise.
+	if len(out) > 0 {
+		top := out[0].score
+		kept := out[:0]
+		for _, r := range out {
+			if (r.Kind == Recipe && r.score >= top*0.3) || r.score >= top*0.6 {
+				kept = append(kept, r)
+			}
+		}
+		out = kept
+	}
 	if len(out) > n {
 		out = out[:n]
 	}

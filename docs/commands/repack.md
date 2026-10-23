@@ -10,7 +10,7 @@ Common: `git repack -a -d` (one pack, delete old). Add `-f --depth=50 --window=2
 
 | Flag | What it does |
 |------|--------------|
-| `-a` | Pack everything reachable into one pack. Use with `-d`. Promisor packs are repacked separately. Dumb-HTTP clients must re-download it all. |
+| `-a` | Pack everything reachable into one pack. Use with `-d`, which then deletes unreachable packed objects. Promisor packs are repacked separately. Dumb-HTTP clients must re-download it all. |
 | `-A` | Like `-a`, but with `-d` unreachable objects become loose (left for `git gc` expiry) instead of deleted. |
 | `-d` | Delete now-redundant packs and loose copies (`git prune-packed`). |
 | `--[no-]cruft` | Like `-a`, but with `-d` unreachable objects go into an age-tracking cruft pack. Not with `-k`. |

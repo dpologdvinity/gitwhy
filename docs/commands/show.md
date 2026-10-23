@@ -25,7 +25,7 @@ Also takes commit formatting [revision options](../shared/revision-options.md#co
 
 | Flag | What it does |
 |------|--------------|
-| `-m` | Merge diffs in the default format (`log.diffMerges`). Needs `-p`. |
+| `-m` | Merge diffs in the `log.diffMerges` format (default: against each parent separately). |
 | `-c` | Combined diff against all parents. `--diff-merges=combined -p`. |
 | `--cc` | Compact combined diff, hiding one-side hunks. Default. |
 | `--dd` | Diff against first parent. `--diff-merges=first-parent -p`. |

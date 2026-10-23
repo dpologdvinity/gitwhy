@@ -2,6 +2,8 @@
 
 Internal: handles `ext::` URLs by running your command and talking to the git server over its stdin/stdout. Reach a server through any program (custom SSH flags, socat, tunnels) without editing config.
 
+Blocked by default (`fatal: transport 'ext' not allowed`): the URL runs any command, so allow it only for URLs you trust, e.g. `git -c protocol.ext.allow=always clone ext::...`.
+
 The far end must be `git-upload-pack`, `git-receive-pack`, `git-upload-archive`, or a `git://` daemon.
 
 **Usage:** `git remote add <name> "ext::<command>[ <arguments>...]"` (or any `git fetch`/`clone`/`push` with an `ext::` URL)

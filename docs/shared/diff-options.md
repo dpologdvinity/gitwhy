@@ -94,7 +94,7 @@ Terms: **hunk** = one block of changed lines. **Context** = unchanged lines arou
 |------|--------------|
 | `--diff-filter=[ACDMRTUXB...][*]` | Only these change types: `A`dded, `C`opied, `D`eleted, `M`odified, `R`enamed, `T`ype changed, `U`nmerged, `X` unknown, `B` broken. Lowercase excludes. `*`: all files if any match. |
 | `-S<string>` | Only changes that alter the count of `<string>`. Searches binaries too. |
-| `-G<regex>` | Only changes whose added/removed lines match `<regex>` (includes edits near a match). |
+| `-G<regex>` | Only changes whose added/removed lines match `<regex>` (catches edits that keep the count, unlike `-S`). |
 | `--pickaxe-regex` | Treat `-S` as an extended regex. |
 | `--pickaxe-all` | On `-S`/`-G` match, show every file in that change. |
 | `--find-object=<id>` | Only changes adding or removing this blob or submodule commit. |

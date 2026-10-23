@@ -17,7 +17,7 @@ Apply a patch to files, optionally the index. Doesn't commit (use `git am` for e
 | `--[no-]index` | Apply to files and index; they must match for touched paths. |
 | `--[no-]cached` | Apply to index only. |
 | `-N`, `--[no-]intent-to-add` | Files-only mode: mark new files intent-to-add (`git add -N`). Ignored with `--index`/`--cached`. |
-| `-3`, `--[no-]3way` | On failure, 3-way merge using the patch's original versions (if present), leaving conflict markers. Implies `--index` unless `--cached`. Not with `--reject`. |
+| `-3`, `--[no-]3way` | 3-way merge using the patch's original versions (if present; else apply normally); may leave conflict markers. Implies `--index` unless `--cached`. Not with `--reject`. |
 | `--ours`, `--theirs`, `--union` | With `--3way`: resolve conflicts with ours, theirs, or both. |
 | `--[no-]build-fake-ancestor=<file>` | Write a temp index of the patch's original versions to `<file>`. Used by `git am`. |
 | `-R`, `--[no-]reverse` | Apply in reverse (undo). |

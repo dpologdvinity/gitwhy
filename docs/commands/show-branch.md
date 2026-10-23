@@ -6,7 +6,7 @@ Show branches side by side as a text grid of which commits each has, back to whe
 
 `<rev>`: branch, tag or commit. `<glob>`: ref pattern (`topic/*`). Default: `showBranch.default`, else all branches.
 
-Output marks: `*` current branch, `!` other branch, `+` commit on this branch, `-` merge.
+Output marks: header `*` current branch, `!` other branch; per commit, in each branch's column, `*` (current branch) or `+` if the commit is on it, `-` if it is a merge.
 
 ## Flags
 

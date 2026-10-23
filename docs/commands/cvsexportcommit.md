@@ -23,5 +23,5 @@ Run from the CVS checkout root with `GIT_DIR` set, or from the git repo with `-w
 | `-u` | Update affected files from CVS first. |
 | `-k` | Undo CVS keyword expansion (`$Revision: 1.2$` to `$Revision$`) before patching. |
 | `-w <cvs-workdir>` | CVS checkout path. No `GIT_DIR` needed inside the git repo. Default `cvsexportcommit.cvsdir`. |
-| `-W` | Current folder is both git and CVS checkout. Git resets it to the parent commit first. |
+| `-W` | Current folder is both git and CVS checkout. Checks out the parent commit there first. |
 | `-v` | Verbose. |

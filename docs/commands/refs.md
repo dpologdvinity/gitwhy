@@ -24,7 +24,7 @@ Low-level ref tools: list, check, pack, convert storage format, and (2.56+) crea
 
 | Flag | What it does |
 |------|--------------|
-| `--ref-format=<format>` | `files` (default) or `reftable`. |
+| `--ref-format=<format>` | Target: `files` or `reftable`. Required. |
 | `--dry-run` | Write results to a separate printed directory; repo unchanged. |
 | `--[no-]reflog` | Migrate reflogs (default). `--no-reflog` discards them. |
 

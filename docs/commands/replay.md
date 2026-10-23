@@ -1,6 +1,6 @@
 # git replay
 
-Experimental: copy commits onto a new base (like `rebase`/`cherry-pick`) without touching working files or index. Works in bare repos. Updates refs atomically. Exit 0 success, 1 conflicts (not reported), other on error. Can't replay merges (2.56+: unless `--linearize`).
+Experimental: copy commits onto a new base (like `rebase`/`cherry-pick`) without touching working files or index. Works in bare repos. Updates refs atomically. Exit 0 success, 1 on conflicts (refs untouched, conflicts not shown), other on error. Can't replay merges (2.56+: unless `--linearize`).
 
 Examples:
 - `git replay --onto=target origin/main..mybranch`: rebase `mybranch` onto `target`.
