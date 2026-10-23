@@ -23,7 +23,7 @@ homebrew_casks:
     license: MIT
     repository:
       owner: dpologdvinity
-      name: homebrew-tap
+      name: homebrew-gitwhy
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 changelog:
   use: github
