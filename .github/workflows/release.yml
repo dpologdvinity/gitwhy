@@ -37,3 +37,42 @@ jobs:
         working-directory: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  repos:
+    needs: release # builds the apt and dnf repos from the release's .deb and .rpm files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install repo tools
+        run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c gnupg
+      - name: Check out the site branch (gh-pages)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$url" gh-pages >/dev/null; then
+            git clone --quiet --branch gh-pages --depth 1 "$url" site
+          else
+            git init --quiet -b gh-pages site
+            git -C site remote add origin "$url"
+          fi
+      - name: Download the packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" -p '*.deb' -p '*.rpm' -D pkgs
+      - name: Build and sign the repos
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          export GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')
+          scripts/build-repos.sh pkgs site
+          touch site/.nojekyll
+      - name: Publish
+        run: |
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "repos: ${GITHUB_REF_NAME}"
+          git push origin gh-pages
