@@ -19,6 +19,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y git-lfs git-filter-repo
       - run: go vet ./...
       - run: go test ./...
+      - name: Remote tests with autocrlf=true (the Git for Windows default)
+        if: runner.os == 'Windows'
+        env:
+          GITWHY_TEST_AUTOCRLF: "true"
+        run: go test ./cmd/gitwhy/ -run 'TestMakeBranchMatchRemote|TestRecoverPlainGitPull|TestDeleteBranchUsesItsUpstream|TestPushedCommitWarning'
       - if: runner.os == 'Linux'
         uses: golangci/golangci-lint-action@v9
         with:
