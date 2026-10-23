@@ -60,6 +60,12 @@ scoop bucket add gitwhy https://github.com/dpologdvinity/homebrew-gitwhy
 scoop install gitwhy
 ```
 
+Or with PowerShell (no Scoop needed):
+
+```powershell
+irm https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.ps1 | iex
+```
+
 Or download the zip from the [releases](https://github.com/dpologdvinity/gitwhy/releases) page.
 
 ```sh
