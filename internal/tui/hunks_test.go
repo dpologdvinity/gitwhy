@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -159,5 +161,44 @@ func TestGraphNotLoadedOffCommitsTab(t *testing.T) {
 	m.key("2")
 	if m.count(tabCommits) != 1 {
 		t.Fatalf("count = %d after switching to Commits", m.count(tabCommits))
+	}
+}
+
+func TestHunkModeStagedRenameStagesWhole(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "old.txt", numbered(20, nil))
+	r.Git("mv", "old.txt", "new.txt")
+	m := &model{repo: r.Repo}
+	m.load()
+	m.key("enter")
+	if m.hunks != nil || !strings.Contains(m.msg, "renamed file") {
+		t.Fatalf("hunks=%v msg=%q", m.hunks, m.msg)
+	}
+}
+
+func TestLineModeRefusedForNewAndDeletedFiles(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "gone.txt", "1\n2\n")
+	r.Write("added.txt", "x\ny\n")
+	r.Git("add", "added.txt")
+	if err := os.Remove(filepath.Join(r.Top, "gone.txt")); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"added.txt", "gone.txt"} {
+		m := &model{repo: r.Repo}
+		m.load()
+		for i, f := range m.files {
+			if f.path == path {
+				m.cursor[tabChanges] = i
+			}
+		}
+		m.key("enter")
+		if m.hunks == nil {
+			t.Fatalf("%s: no hunk view (msg %q)", path, m.msg)
+		}
+		m.key("v")
+		if m.hunks.lineMode || !strings.Contains(m.msg, "whole") {
+			t.Fatalf("%s: lineMode=%v msg=%q", path, m.hunks.lineMode, m.msg)
+		}
 	}
 }
