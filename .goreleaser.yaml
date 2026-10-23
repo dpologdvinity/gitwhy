@@ -15,5 +15,15 @@ archives:
         formats: [zip]
 checksum:
   name_template: checksums.txt
+homebrew_casks:
+  - name: gitwhy
+    binaries: [gitwhy]
+    homepage: https://github.com/dpologdvinity/gitwhy
+    description: "Do anything with git without looking it up, with previews and undo"
+    license: MIT
+    repository:
+      owner: dpologdvinity
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 changelog:
   use: github
