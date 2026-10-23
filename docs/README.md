@@ -64,7 +64,7 @@ Shared option sets: [diff options](shared/diff-options.md), [revision options](s
 | [`filter-branch`](commands/filter-branch.md) | Not recommended: use [`git filter-repo`](commands/filter-repo.md). |
 | [`mergetool`](commands/mergetool.md) | Open each conflicted file in a merge tool (vimdiff, meld, kdiff3, ...) to resolve it. |
 | [`pack-refs`](commands/pack-refs.md) | Move loose refs (one file per branch/tag) into `.git/packed-refs`, saving space and time with many refs. |
-| [`prune`](commands/prune.md) | Delete unreachable loose objects (not reachable from any ref or reflog), loose objects already packed, and stale `.git/shallow` entries. |
+| [`prune`](commands/prune.md) | Delete unreachable loose objects (not reachable from any ref, reflog, or the index), loose objects already packed, and stale `.git/shallow` entries. |
 | [`reflog`](commands/reflog.md) | Show and manage reflogs: local logs of where `HEAD` and each branch pointed. |
 | [`refs`](commands/refs.md) | Low-level ref tools: list, check, pack, convert storage format, and (2.56+) create, update, delete, rename. |
 | [`remote`](commands/remote.md) | Manage remotes: named links to other copies of the repo (e.g. |
@@ -179,7 +179,7 @@ Shared option sets: [diff options](shared/diff-options.md), [revision options](s
 |---------|--------------|
 | [`check-attr`](commands/check-attr.md) | Show which `.gitattributes` settings apply to files: `unspecified`, `unset`, `set`, or a value. |
 | [`check-ignore`](commands/check-ignore.md) | Debug ignore rules: print the given paths that `.gitignore`, `.git/info/exclude`, or `core.excludesFile` ignores. |
-| [`check-mailmap`](commands/check-mailmap.md) | Print each contact's canonical `Name <email>` per `.mailmap` (which maps old or misspelled identities to one), or the input unchanged if unmapped. |
+| [`check-mailmap`](commands/check-mailmap.md) | Print each contact's canonical `Name <email>` per `.mailmap` (which maps old or misspelled identities to one), else the input as `Name <email>` or `<email>`. |
 | [`check-ref-format`](commands/check-ref-format.md) | Check that a name is a valid ref name; exit non-zero if not. |
 | [`column`](commands/column.md) | Lay out stdin lines in columns. |
 | [`credential`](commands/credential.md) | Get, save, or forget credentials the way git does (config, helpers like keychains, or prompting). |
@@ -192,7 +192,7 @@ Shared option sets: [diff options](shared/diff-options.md), [revision options](s
 | [`interpret-trailers`](commands/interpret-trailers.md) | Add or read trailers: `Key: value` lines ending a commit message (`Signed-off-by: Alice <a@x.com>`, `Co-authored-by: ...`). |
 | [`mailinfo`](commands/mailinfo.md) | Low-level: split one email from stdin into commit message `<msg>` and patch `<patch>`; print author name, email, subject. |
 | [`mailsplit`](commands/mailsplit.md) | Split an mbox or Maildir into one file per email (`0001`, `0002`, ...). |
-| [`merge-octopus`](commands/merge-octopus.md) | Internal: the "octopus" merge strategy, run by `git merge -s octopus` (default when merging 3+ branches). |
+| [`merge-octopus`](commands/merge-octopus.md) | Internal: the "octopus" merge strategy, run by `git merge -s octopus` (default when merging 2+ branches at once). |
 | [`merge-one-file`](commands/merge-one-file.md) | Internal: the default program [`git merge-index`](commands/merge-index.md) runs to merge one file (adds, deletes, mode changes, three-way content merge with conflict markers). |
 | [`merge-ours`](commands/merge-ours.md) | Internal command run by `git merge -s ours`. |
 | [`merge-recursive`](commands/merge-recursive.md) | Internal: `git merge` runs it for the `recursive` strategy, which since git 2.50 means `ort` (the default). |
