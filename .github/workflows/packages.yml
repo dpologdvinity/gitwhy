@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - .goreleaser.yaml
+      - flake.nix
+      - flake.lock
+      - go.mod
+      - go.sum
       - scripts/build-repos.sh
       - scripts/test-repos.sh
       - .github/workflows/packages.yml
@@ -22,3 +26,10 @@ jobs:
           args: release --snapshot --clean --skip=publish
       - name: Build the repos with a throwaway key and install from them (Ubuntu, Fedora)
         run: scripts/test-repos.sh dist
+  nix:
+    runs-on: ubuntu-latest # fails when go.mod/go.sum change and flake.nix's vendorHash is stale
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - run: nix build .#default --print-build-logs
+      - run: ./result/bin/gitwhy version

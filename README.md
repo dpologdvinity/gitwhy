@@ -89,6 +89,13 @@ sudo dnf install gitwhy
 
 Each release also has `.deb`, `.rpm`, `.apk` (Alpine) and `.pkg.tar.zst` (Arch) files you can install directly.
 
+**Nix** (builds from source; `gitwhy version` shows the commit):
+
+```sh
+nix run github:dpologdvinity/gitwhy
+nix profile install github:dpologdvinity/gitwhy
+```
+
 Or with Homebrew: `brew install dpologdvinity/gitwhy/gitwhy`. Or with npm or bun (Node 18+):
 `npm i -g @kaitlynbassford/gitwhy` / `bun add -g @kaitlynbassford/gitwhy`, or `npx @kaitlynbassford/gitwhy` to try it (the command is still `gitwhy`). The binary is downloaded from the
 release and checked against its checksum, at install or on first run.
