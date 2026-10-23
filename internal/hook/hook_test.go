@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -237,6 +238,9 @@ func fakeGitwhy(t *testing.T) (pathEnv, logFile string) {
 }
 
 func TestHookScriptOnlySpawnsGitwhyForRiskyCommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake gitwhy is a sh script; Git Bash PATH handling differs. The shell logic is covered on Linux")
+	}
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		t.Skip("no bash")
