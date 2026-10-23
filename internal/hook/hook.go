@@ -67,9 +67,13 @@ func Post(cwd, id string) {
 	}
 }
 
-const script = `git() {
+// scriptFmt wraps git. The case keeps the common commands (status, log, add...) from
+// spawning gitwhy at all: only subcommands with a danger rule go through __pre.
+const scriptFmt = `git() {
   local __gw_id __gw_rc
-  __gw_id=$(command gitwhy __pre "$@" 2>/dev/null)
+  case "$1" in
+    %s) __gw_id=$(command gitwhy __pre "$@" 2>/dev/null) ;;
+  esac
   command git "$@"
   __gw_rc=$?
   if [ -n "$__gw_id" ]; then command gitwhy __post "$__gw_id" >/dev/null 2>&1; fi
@@ -87,7 +91,14 @@ func Script(shell string) (string, error) {
 	if shell != "bash" && shell != "zsh" {
 		return "", fmt.Errorf("%q: only bash and zsh are supported", shell)
 	}
-	return script, nil
+	// push has rules too, but Pre never snapshots it: a local snapshot can't undo a push.
+	var cmds []string
+	for _, c := range danger.Commands() {
+		if c != "push" {
+			cmds = append(cmds, c)
+		}
+	}
+	return fmt.Sprintf(scriptFmt, strings.Join(cmds, "|")), nil
 }
 
 // Install adds the hook to a shell rc file. It does nothing if it's already there.

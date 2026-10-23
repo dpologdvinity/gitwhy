@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -217,5 +218,46 @@ func TestRCPath(t *testing.T) {
 	}
 	if got := RCPath("bash", "/h"); got != filepath.Join("/h", ".bashrc") {
 		t.Fatalf("bash = %q", got)
+	}
+}
+
+// fakeGitwhy puts a gitwhy on PATH that logs each call, so tests can see when the hook spawns it.
+func fakeGitwhy(t *testing.T) (pathEnv, logFile string) {
+	t.Helper()
+	bin := t.TempDir()
+	logFile = filepath.Join(t.TempDir(), "calls")
+	sh := "#!/bin/sh\necho \"$1\" >> " + logFile + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "gitwhy"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	return bin + string(os.PathListSeparator) + filepath.Dir(gitPath), logFile
+}
+
+func TestHookScriptOnlySpawnsGitwhyForRiskyCommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake gitwhy is a sh script; Git Bash PATH handling differs. The shell logic is covered on Linux")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash")
+	}
+	script, _ := Script("bash")
+	path, calls := fakeGitwhy(t)
+	f := filepath.Join(t.TempDir(), "t.sh")
+	body := script + "\ngit --version >/dev/null; git status >/dev/null 2>&1; git log -1 >/dev/null 2>&1; git add -A 2>/dev/null; git push 2>/dev/null; git reset --hard >/dev/null 2>&1\n"
+	if err := os.WriteFile(f, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(bash, f)
+	c.Dir = t.TempDir()
+	c.Env = append(os.Environ(), "PATH="+path)
+	c.CombinedOutput()
+	data, _ := os.ReadFile(calls)
+	if got := strings.Fields(string(data)); strings.Join(got, ",") != "__pre" {
+		t.Fatalf("gitwhy was called with %v, want only __pre for reset", got)
 	}
 }

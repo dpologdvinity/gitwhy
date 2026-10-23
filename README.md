@@ -93,7 +93,7 @@ gitwhy hook install
 ```
 
 This wraps `git` in your shell so `gitwhy undo` works for commands you type yourself. It snapshots
-before risky commands only (like `reset --hard` or `clean -fd`), costs about 30 ms otherwise, and works
+before risky commands only (like `reset --hard` or `clean -fd`), costs a few ms on other commands, and works
 in bash and zsh. Set `GITWHY_HOOK_OFF=1` to pause it; `gitwhy hook uninstall` removes it.
 
 ## Development

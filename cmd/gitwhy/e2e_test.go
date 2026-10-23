@@ -312,7 +312,12 @@ func withRemote(t *testing.T) (*repo, *repo) {
 	bare := t.TempDir()
 	up.git("clone", "-q", "--bare", up.dir, bare)
 	clone := &repo{t: t, dir: t.TempDir()}
-	clone.git("clone", "-q", "-c", "core.autocrlf=false", bare, clone.dir)
+	// CI also runs these with GITWHY_TEST_AUTOCRLF=true, Git for Windows' default.
+	autocrlf := "false"
+	if v := os.Getenv("GITWHY_TEST_AUTOCRLF"); v != "" {
+		autocrlf = v
+	}
+	clone.git("clone", "-q", "-c", "core.autocrlf="+autocrlf, bare, clone.dir)
 	clone.git("config", "user.name", "Test")
 	clone.git("config", "user.email", "test@example.com")
 	up.git("remote", "add", "origin", bare)
