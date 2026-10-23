@@ -25,6 +25,7 @@ Keys act on the selected item and open the same guided recipe as the CLI, with t
 in: `r` reword a commit, `d` drop it, `f` add changes to it, `s` split it, `m` move it to a new branch.
 Staging with space is instant, since it's always reversible. `?` shows the keys for the current tab.
 `enter` on a changed file shows its hunks: `space` stages one, `v` picks single lines.
+Commits tab draws the branch graph; `a` shows all branches, `p` copies a commit here.
 
 ## Commands
 

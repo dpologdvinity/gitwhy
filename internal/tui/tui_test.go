@@ -18,8 +18,8 @@ func TestLoadAndSuggest(t *testing.T) {
 
 	m := &model{repo: r.Repo}
 	m.load()
-	if m.head != "main" || len(m.commits) != 2 || len(m.brs) != 1 {
-		t.Fatalf("head=%q commits=%d branches=%d", m.head, len(m.commits), len(m.brs))
+	if m.head != "main" || m.count(tabCommits) != 2 || len(m.brs) != 1 {
+		t.Fatalf("head=%q commits=%d branches=%d", m.head, m.count(tabCommits), len(m.brs))
 	}
 	got := map[string]string{}
 	for _, f := range m.files {
@@ -65,7 +65,7 @@ func TestCommitKeysPresetCommit(t *testing.T) {
 	m := &model{repo: r.Repo, tab: tabCommits}
 	m.load()
 	a, ok := m.tabKey("r", 0)
-	if !ok || a.Recipe != "reword-commit" || a.Preset["commit"] != m.commits[0].id {
+	if !ok || a.Recipe != "reword-commit" || a.Preset["commit"] != m.commitAt(0).ID {
 		t.Fatalf("r = %+v", a)
 	}
 }
