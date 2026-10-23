@@ -64,23 +64,23 @@ func (f file) label() string {
 type branch struct{ name, track, when, subject string }
 
 type model struct {
-	repo    *git.Repo
-	w, h    int
-	tab     int
-	cursor  [3]int
-	files   []file
-	rows    []graph.Row // Commits tab; the cursor counts commit rows only
-	all     bool        // Commits tab shows every branch
-	brs     []branch
-	head    string // branch name or "HEAD (detached)"
-	ab      string // "↑2 ↓1" vs upstream
-	up      string
-	op      string
-	help    bool
-	msg     string // one-line result of the last quick action
-	detail  string
-	action  Action
-	hunks   *hunkView // non-nil while zoomed into a file's hunks
+	repo   *git.Repo
+	w, h   int
+	tab    int
+	cursor [3]int
+	files  []file
+	rows   []graph.Row // Commits tab; the cursor counts commit rows only
+	all    bool        // Commits tab shows every branch
+	brs    []branch
+	head   string // branch name or "HEAD (detached)"
+	ab     string // "↑2 ↓1" vs upstream
+	up     string
+	op     string
+	help   bool
+	msg    string // one-line result of the last quick action
+	detail string
+	action Action
+	hunks  *hunkView // non-nil while zoomed into a file's hunks
 }
 
 // Run shows the TUI and returns what the user chose.
