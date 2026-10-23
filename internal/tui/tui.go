@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/dpologdvinity/gitwhy/internal/git"
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
@@ -107,8 +107,9 @@ func (m *model) load() {
 			m.up = strings.TrimPrefix(e, "# branch.upstream ")
 		case strings.HasPrefix(e, "# branch.ab "):
 			var a, b int
-			fmt.Sscanf(strings.TrimPrefix(e, "# branch.ab "), "+%d -%d", &a, &b)
-			m.ab = fmt.Sprintf("↑%d ↓%d", a, b)
+			if _, err := fmt.Sscanf(strings.TrimPrefix(e, "# branch.ab "), "+%d -%d", &a, &b); err == nil {
+				m.ab = fmt.Sprintf("↑%d ↓%d", a, b)
+			}
 		case strings.HasPrefix(e, "1 ") || strings.HasPrefix(e, "u "):
 			f := strings.SplitN(e, " ", 9)
 			if e[0] == 'u' {
