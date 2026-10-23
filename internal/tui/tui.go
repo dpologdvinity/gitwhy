@@ -36,8 +36,9 @@ const (
 var tabNames = []string{"Changes", "Commits", "Branches"}
 
 type file struct {
-	x, y byte // porcelain status letters: index, work tree
-	path string
+	x, y  byte // porcelain status letters: index, work tree
+	path  string
+	moved bool // renamed or copied in the index
 }
 
 func (f file) conflict() bool {
@@ -120,7 +121,7 @@ func (m *model) load() {
 			m.files = append(m.files, file{x: dot(f[1][0]), y: dot(f[1][1]), path: f[len(f)-1]})
 		case strings.HasPrefix(e, "2 "):
 			f := strings.SplitN(e, " ", 10)
-			m.files = append(m.files, file{x: dot(f[1][0]), y: dot(f[1][1]), path: f[9]})
+			m.files = append(m.files, file{x: dot(f[1][0]), y: dot(f[1][1]), path: f[9], moved: true})
 			i++ // original path follows
 		case strings.HasPrefix(e, "? "):
 			m.files = append(m.files, file{x: '?', y: '?', path: e[2:]})
@@ -414,12 +415,20 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			return run("file-history", recipe.Answers{"file": f.path}), true
 		}
 	case tabCommits:
+		gc := m.commitAt(i)
 		if k == "a" {
 			m.all = !m.all
 			m.load()
+			if gc != nil { // keep the same commit selected
+				for j := 0; j < m.count(tabCommits); j++ {
+					if m.commitAt(j).ID == gc.ID {
+						m.cursor[tabCommits] = j
+						break
+					}
+				}
+			}
 			return Action{}, false
 		}
-		gc := m.commitAt(i)
 		if gc == nil {
 			return Action{}, false
 		}
@@ -430,6 +439,10 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 		}
 		switch k {
 		case "p":
+			if m.repo.OK("merge-base", "--is-ancestor", gc.ID, "HEAD") {
+				m.msg = "That commit is already on your branch."
+				return Action{}, false
+			}
 			return run("copy-commit", recipe.Answers{"from": gc.ID, "commit": gc.ID}), true
 		case "r":
 			return run("reword-commit", c), true

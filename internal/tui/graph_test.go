@@ -60,3 +60,30 @@ func TestGraphCursorSkipsConnectors(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyKeyRefusedForCommitOnBranch(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	m := &model{repo: r.Repo, tab: tabCommits}
+	m.load()
+	if _, ok := m.tabKey("p", 0); ok || !strings.Contains(m.msg, "already on your branch") {
+		t.Fatalf("ok=%v msg=%q", ok, m.msg)
+	}
+}
+
+func TestAllToggleKeepsSelectedCommit(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "a.txt", "a\n")
+	r.Git("switch", "-q", "-c", "other")
+	r.Commit("elsewhere", "b.txt", "b\n")
+	r.Git("switch", "-q", "main")
+	r.Commit("here", "c.txt", "c\n")
+	m := &model{repo: r.Repo, tab: tabCommits}
+	m.load()
+	m.cursor[tabCommits] = 1 // "base"
+	want := m.commitAt(1).ID
+	m.tabKey("a", 1)
+	if got := m.commitAt(m.cursor[tabCommits]); got == nil || got.ID != want {
+		t.Fatalf("selection moved: %+v", got)
+	}
+}
