@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.s
 ```
 
 Or with Homebrew: `brew install dpologdvinity/gitwhy/gitwhy`. Or with npm or bun (Node 18+):
-`npm i -g gitwhy` / `bun add -g gitwhy`, or `npx gitwhy` to try it. The binary is downloaded from the
+`npm i -g @kaitlynbassford/gitwhy` / `bun add -g @kaitlynbassford/gitwhy`, or `npx @kaitlynbassford/gitwhy` to try it (the command is still `gitwhy`). The binary is downloaded from the
 release and checked against its checksum, at install or on first run.
 
 That downloads the latest [release](https://github.com/dpologdvinity/gitwhy/releases), checks its
