@@ -312,7 +312,7 @@ func withRemote(t *testing.T) (*repo, *repo) {
 	bare := t.TempDir()
 	up.git("clone", "-q", "--bare", up.dir, bare)
 	clone := &repo{t: t, dir: t.TempDir()}
-	clone.git("clone", "-q", bare, clone.dir)
+	clone.git("clone", "-q", "-c", "core.autocrlf=false", bare, clone.dir)
 	clone.git("config", "user.name", "Test")
 	clone.git("config", "user.email", "test@example.com")
 	up.git("remote", "add", "origin", bare)
@@ -400,7 +400,8 @@ func TestLFSTrack(t *testing.T) {
 	}
 	r := newRepo(t)
 	out := r.do("lfs-track", text("*.bin"), yes)
-	expect(t, ".gitattributes", r.read(".gitattributes"), "*.bin filter=lfs diff=lfs merge=lfs -text\n", out)
+	// git-lfs writes CRLF on Windows.
+	expect(t, ".gitattributes", strings.ReplaceAll(r.read(".gitattributes"), "\r\n", "\n"), "*.bin filter=lfs diff=lfs merge=lfs -text\n", out)
 }
 
 func TestRunWithPreviewAndUndo(t *testing.T) {
