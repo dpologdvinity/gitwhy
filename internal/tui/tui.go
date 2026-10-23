@@ -465,7 +465,7 @@ var (
 )
 
 var keys = [][]string{
-	{"space stage/unstage", "a stage all", "c commit", "d discard", "s stash", "H history", "enter resolve conflict"},
+	{"space stage/unstage", "a stage all", "c commit", "d discard", "s stash", "H history", "enter hunks / resolve conflict"},
 	{"r reword", "d drop", "f add changes to it", "s split", "x revert", "e reorder/squash", "m move to new branch", "b branch from", "o reset branch here", "t tag"},
 	{"enter switch", "m merge into current", "b rebase onto", "n new branch from", "c compare", "D delete"},
 }

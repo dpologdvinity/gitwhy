@@ -24,6 +24,7 @@ how far ahead or behind the remote you are, and **Next:** suggests what to do fo
 Keys act on the selected item and open the same guided recipe as the CLI, with the answers already filled
 in: `r` reword a commit, `d` drop it, `f` add changes to it, `s` split it, `m` move it to a new branch.
 Staging with space is instant, since it's always reversible. `?` shows the keys for the current tab.
+`enter` on a changed file shows its hunks: `space` stages one, `v` picks single lines.
 
 ## Commands
 

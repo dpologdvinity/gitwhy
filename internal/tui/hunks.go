@@ -48,6 +48,9 @@ func (m *model) openHunks(path string, staged bool) error {
 func (m *model) hunkKey(k string) (tea.Model, tea.Cmd) {
 	m.msg = ""
 	v := m.hunks
+	if v.lineMode {
+		return m.lineKey(k)
+	}
 	switch k {
 	case "ctrl+c":
 		return m.pick(Action{Kind: "quit"})
@@ -66,12 +69,53 @@ func (m *model) hunkKey(k string) (tea.Model, tea.Cmd) {
 		if err := m.applyHunk(nil); err != nil {
 			m.msg = "✗ " + strings.TrimSpace(err.Error())
 		}
+	case "v":
+		v.lineMode, v.sel, v.line = true, make([]bool, len(v.fd.Hunks[v.cur].Lines)), 0
+		v.line = v.nextChange(-1, 1)
 	case "S":
 		if m.openHunks(v.path, !v.staged) != nil {
 			m.msg = "Nothing on the other side."
 		}
 	}
 	return m, nil
+}
+
+func (m *model) lineKey(k string) (tea.Model, tea.Cmd) {
+	v := m.hunks
+	switch k {
+	case "ctrl+c":
+		return m.pick(Action{Kind: "quit"})
+	case "esc", "q":
+		v.lineMode = false
+	case "down", "j":
+		v.line = v.nextChange(v.line, 1)
+	case "up", "k":
+		v.line = v.nextChange(v.line, -1)
+	case "space":
+		v.sel[v.line] = !v.sel[v.line]
+	case "enter":
+		picked := false
+		for _, s := range v.sel {
+			picked = picked || s
+		}
+		if !picked {
+			m.msg = "Pick lines with space first"
+		} else if err := m.applyHunk(v.sel); err != nil {
+			m.msg = "✗ " + strings.TrimSpace(err.Error())
+		}
+	}
+	return m, nil
+}
+
+// nextChange returns the next +/- line after i in direction dir, or i if none.
+func (v *hunkView) nextChange(i, dir int) int {
+	lines := v.fd.Hunks[v.cur].Lines
+	for j := i + dir; j >= 0 && j < len(lines); j += dir {
+		if lines[j][0] == '+' || lines[j][0] == '-' {
+			return j
+		}
+	}
+	return i
 }
 
 // applyHunk stages (or, on the staged side, unstages) the selected hunk, or
@@ -106,6 +150,9 @@ func (m *model) hunkTitle() string {
 }
 
 func (m *model) hunkKeys() string {
+	if m.hunks.lineMode {
+		return "pick line · enter stage picked lines · esc back"
+	}
 	verb := "stage"
 	if m.hunks.staged {
 		verb = "unstage"
@@ -124,5 +171,17 @@ func (m *model) hunkList(w, h int) []string {
 
 func (m *model) hunkDetail(w, h int) []string {
 	v := m.hunks
-	return colorDiff(strings.Join(v.fd.Hunks[v.cur].Lines, "\n"), w, h)
+	lines := v.fd.Hunks[v.cur].Lines
+	if !v.lineMode {
+		return colorDiff(strings.Join(lines, "\n"), w, h)
+	}
+	rows := make([]string, len(lines))
+	for i, l := range lines {
+		mark := "  "
+		if v.sel[i] {
+			mark = "▌ "
+		}
+		rows[i] = mark + colorDiff(l, w-2, 1)[0]
+	}
+	return scroll(rows, v.line, w, h)
 }

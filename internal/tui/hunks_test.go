@@ -91,3 +91,25 @@ func TestHunkModeQGoesBack(t *testing.T) {
 		t.Fatalf("action=%+v hunks=%v", m.action, m.hunks)
 	}
 }
+
+func TestLineModeStagesPickedLine(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", numbered(10, nil))
+	r.Write("f.txt", numbered(10, map[int]string{5: "line 5\na\nb\n"}))
+	m := &model{repo: r.Repo}
+	m.load()
+	m.key("enter")
+	m.key("v")
+	m.key("enter")
+	if !strings.Contains(m.msg, "Pick lines") {
+		t.Fatalf("msg = %q", m.msg)
+	}
+	m.key("space")
+	m.key("enter")
+	if idx := r.Git("show", ":f.txt"); !strings.Contains(idx, "\na\n") || strings.Contains(idx, "\nb\n") {
+		t.Fatalf("index:\n%s", idx)
+	}
+	if d := r.Git("diff", "-U0"); !strings.Contains(d, "+b") || strings.Contains(d, "+a") {
+		t.Fatalf("unstaged:\n%s", d)
+	}
+}
