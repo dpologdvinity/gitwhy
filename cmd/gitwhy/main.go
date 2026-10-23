@@ -9,6 +9,7 @@ import (
 
 	"github.com/dpologdvinity/gitwhy"
 	"github.com/dpologdvinity/gitwhy/internal/git"
+	"github.com/dpologdvinity/gitwhy/internal/hook"
 	"github.com/dpologdvinity/gitwhy/internal/todo"
 	"github.com/dpologdvinity/gitwhy/internal/ui"
 )
@@ -49,6 +50,17 @@ func run(args []string) error {
 	// git runs us as the rebase sequence editor: gitwhy __todo <plan> <todo-file>.
 	if len(args) == 3 && args[0] == "__todo" {
 		return todo.Apply(args[1], args[2])
+	}
+	// The shell hook calls these around every git command, so they skip checkGit and docs loading.
+	if len(args) >= 1 && args[0] == "__pre" {
+		wd, _ := os.Getwd()
+		fmt.Print(hook.Pre(wd, args[1:]))
+		return nil
+	}
+	if len(args) == 2 && args[0] == "__post" {
+		wd, _ := os.Getwd()
+		hook.Post(wd, args[1])
+		return nil
 	}
 	quiet := false
 	var rest []string

@@ -238,20 +238,33 @@ func List(r *git.Repo) ([]*Snapshot, error) {
 	}
 	var out []*Snapshot
 	for _, e := range entries {
-		dir := filepath.Join(root(r), e.Name())
-		data, err := os.ReadFile(filepath.Join(dir, "meta.json"))
-		if err != nil {
-			continue // incomplete snapshot
+		if s, err := read(filepath.Join(root(r), e.Name())); err == nil {
+			out = append(out, s) // skip incomplete snapshots
 		}
-		var s Snapshot
-		if json.Unmarshal(data, &s) != nil {
-			continue
-		}
-		s.dir = dir
-		out = append(out, &s)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
 	return out, nil
+}
+
+// Get returns the snapshot with this ID.
+func Get(r *git.Repo, id string) (*Snapshot, error) {
+	if id == "" || id != filepath.Base(id) || strings.HasPrefix(id, ".") {
+		return nil, fmt.Errorf("bad snapshot ID %q", id)
+	}
+	return read(filepath.Join(root(r), id))
+}
+
+func read(dir string) (*Snapshot, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "meta.json"))
+	if err != nil {
+		return nil, err
+	}
+	var s Snapshot
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	s.dir = dir
+	return &s, nil
 }
 
 // Delete removes a snapshot and its ref.
