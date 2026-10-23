@@ -46,5 +46,26 @@ scoops:
     homepage: https://github.com/dpologdvinity/gitwhy
     description: Do anything with git without looking it up, with previews and undo
     license: MIT
+winget:
+  - name: gitwhy
+    package_identifier: dpologdvinity.gitwhy
+    publisher: dpologdvinity
+    publisher_url: https://github.com/dpologdvinity
+    short_description: Do anything with git without looking it up, with previews and undo
+    license: MIT
+    homepage: https://github.com/dpologdvinity/gitwhy
+    # Without a token (no fork yet) skip the upload instead of failing the release.
+    skip_upload: '{{ if index .Env "WINGET_TOKEN" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: dpologdvinity
+      name: winget-pkgs
+      branch: "gitwhy-{{ .Version }}"
+      token: '{{ index .Env "WINGET_TOKEN" }}'
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
 changelog:
   use: github
