@@ -24,6 +24,8 @@ how far ahead or behind the remote you are, and **Next:** suggests what to do fo
 Keys act on the selected item and open the same guided recipe as the CLI, with the answers already filled
 in: `r` reword a commit, `d` drop it, `f` add changes to it, `s` split it, `m` move it to a new branch.
 Staging with space is instant, since it's always reversible. `?` shows the keys for the current tab.
+`enter` on a changed file shows its hunks: `space` stages one, `v` picks single lines.
+Commits tab draws the branch graph; `a` shows all branches, `p` copies a commit here.
 
 ## Commands
 
@@ -50,7 +52,8 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 ## Install
 
-Needs git 2.38+. Linux and WSL tested; macOS builds but is untested; Git Bash not yet.
+Needs git 2.38+. Linux, WSL and Windows (Git Bash or PowerShell, CI-tested) work; macOS builds but is untested.
+On Windows, download the zip from the [releases](https://github.com/dpologdvinity/gitwhy/releases) page.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
@@ -80,6 +83,16 @@ leaked secret from history, the old commits stay in your local undo points until
 
 Undo leaves alone any branch that changed after the action (for example a commit you made later in
 plain git, or work in another worktree), and tells you which.
+
+## Undo for plain git (optional)
+
+```sh
+gitwhy hook install
+```
+
+This wraps `git` in your shell so `gitwhy undo` works for commands you type yourself. It snapshots
+before risky commands only (like `reset --hard` or `clean -fd`), costs about 30 ms otherwise, and works
+in bash and zsh. Set `GITWHY_HOOK_OFF=1` to pause it; `gitwhy hook uninstall` removes it.
 
 ## Development
 

@@ -71,7 +71,7 @@ func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 		warn(c.Warn)
 		if c.Suggest != "" {
 			if s := a.recipe(c.Suggest); s != nil {
-				use, err := confirm("Do \""+s.Title+"\" instead?", false)
+				use, err := Confirm("Do \""+s.Title+"\" instead?", false)
 				if err != nil {
 					return err
 				}
@@ -107,7 +107,7 @@ func (a *App) offer(id string) error {
 	if s == nil {
 		return ErrCancelled
 	}
-	use, err := confirm("Do \""+s.Title+"\" instead?", true)
+	use, err := Confirm("Do \""+s.Title+"\" instead?", true)
 	if err != nil || !use {
 		return err
 	}

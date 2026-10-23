@@ -177,7 +177,8 @@ func shellSplit(s string) ([]string, error) {
 	return out, nil
 }
 
-func confirm(title string, def bool) (bool, error) {
+// Confirm asks a yes/no question.
+func Confirm(title string, def bool) (bool, error) {
 	v := def
 	err := prompt(huh.NewConfirm().Title(title).Affirmative("Yes").Negative("No").Value(&v))
 	return v, cancelled(err)

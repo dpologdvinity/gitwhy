@@ -350,7 +350,7 @@ func (a *App) Undo(pick bool) error {
 	say("Go back to just before %s (%s).", cmdStyle.Render(s.Label), recover.Ago(s.Time))
 	say("%s", dimStyle.Render("Branches, HEAD, staged and unstaged changes, untracked files and stashes are put back."))
 	say("%s", dimStyle.Render("Anything sent to a remote (push) is not undone."))
-	ok, err := confirm("Undo it?", true)
+	ok, err := Confirm("Undo it?", true)
 	if err != nil || !ok {
 		return err
 	}

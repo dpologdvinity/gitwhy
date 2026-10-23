@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dpologdvinity/gitwhy"
 	"github.com/dpologdvinity/gitwhy/internal/git"
+	"github.com/dpologdvinity/gitwhy/internal/hook"
 	"github.com/dpologdvinity/gitwhy/internal/todo"
 	"github.com/dpologdvinity/gitwhy/internal/ui"
 )
@@ -29,6 +31,9 @@ Usage:
   gitwhy recover             see what happened recently (plain git too) and go back
   gitwhy resolve             fix merge conflicts
   gitwhy continue | abort    continue or cancel a merge/rebase/cherry-pick in progress
+  gitwhy hook install        undo points for plain git commands too (bash, zsh; not fish)
+  gitwhy hook uninstall      remove the hook from your shell startup file
+  gitwhy hook init <shell>   print the hook (bash or zsh)
   gitwhy version
 
 Flags:
@@ -49,6 +54,20 @@ func run(args []string) error {
 	// git runs us as the rebase sequence editor: gitwhy __todo <plan> <todo-file>.
 	if len(args) == 3 && args[0] == "__todo" {
 		return todo.Apply(args[1], args[2])
+	}
+	// The shell hook calls these around every git command, so they skip checkGit and docs loading.
+	if len(args) >= 1 && args[0] == "__pre" {
+		wd, _ := os.Getwd()
+		fmt.Print(hook.Pre(wd, args[1:]))
+		return nil
+	}
+	if len(args) == 2 && args[0] == "__post" {
+		wd, _ := os.Getwd()
+		hook.Post(wd, args[1])
+		return nil
+	}
+	if len(args) >= 2 && args[0] == "hook" {
+		return hookCmd(args[1:])
 	}
 	quiet := false
 	var rest []string
@@ -131,6 +150,60 @@ func run(args []string) error {
 		return app.RunRecipeID("abort-operation")
 	}
 	return app.Search(strings.Join(rest, " "))
+}
+
+func hookCmd(args []string) error {
+	switch args[0] {
+	case "init":
+		if len(args) != 2 {
+			return errors.New("usage: gitwhy hook init bash|zsh")
+		}
+		s, err := hook.Script(args[1])
+		if err == nil {
+			fmt.Print(s)
+		}
+		return err
+	case "install", "uninstall":
+		shell := filepath.Base(os.Getenv("SHELL"))
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		rc := filepath.Join(home, "."+shell+"rc")
+		if args[0] == "uninstall" {
+			changed := false
+			for _, sh := range []string{"bash", "zsh"} {
+				c, err := hook.Uninstall(filepath.Join(home, "."+sh+"rc"))
+				if err != nil {
+					return err
+				}
+				changed = changed || c
+			}
+			if changed {
+				fmt.Println("Removed. Open a new terminal for it to take effect.")
+			} else {
+				fmt.Println("The hook wasn't installed.")
+			}
+			return nil
+		}
+		if _, err := hook.Script(shell); err != nil {
+			return fmt.Errorf("your shell is %s: %w", shell, err)
+		}
+		if ok, err := ui.Confirm("Add the gitwhy hook to "+rc+"?", true); err != nil || !ok {
+			return err
+		}
+		changed, err := hook.Install(rc, shell)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			fmt.Println("Already in " + rc + ".")
+			return nil
+		}
+		fmt.Println("Open a new terminal (or run: source " + rc + ")")
+		return nil
+	}
+	return fmt.Errorf("unknown hook command %q: use init, install or uninstall", args[0])
 }
 
 // checkGit needs git 2.38+ (merge-tree --write-tree, used for previews).

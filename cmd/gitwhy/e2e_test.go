@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	bin = filepath.Join(dir, "gitwhy")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
@@ -74,7 +78,7 @@ var (
 // env isolates git config and HOME so tests never touch the user's setup.
 func env(home string) []string {
 	cfg := filepath.Join(home, "gitconfig")
-	os.WriteFile(cfg, []byte("[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n"), 0o644)
+	os.WriteFile(cfg, []byte("[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n[core]\n\tautocrlf = false\n"), 0o644)
 	return append(os.Environ(), "ACCESSIBLE=1", "HOME="+home, "GIT_CONFIG_GLOBAL="+cfg, "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_EDITOR=true", "LC_ALL=C", "XDG_CONFIG_HOME="+home)
 }
@@ -151,6 +155,7 @@ func newRepo(t *testing.T) *repo {
 	r.git("config", "user.name", "Test")
 	r.git("config", "user.email", "test@example.com")
 	r.git("config", "commit.gpgsign", "false")
+	r.git("config", "core.autocrlf", "false")
 	for i := 1; i <= 4; i++ {
 		r.commit(fmt.Sprintf("c%d", i), fmt.Sprintf("f%d.txt", i), fmt.Sprintf("%d\n", i))
 	}
@@ -307,7 +312,7 @@ func withRemote(t *testing.T) (*repo, *repo) {
 	bare := t.TempDir()
 	up.git("clone", "-q", "--bare", up.dir, bare)
 	clone := &repo{t: t, dir: t.TempDir()}
-	clone.git("clone", "-q", bare, clone.dir)
+	clone.git("clone", "-q", "-c", "core.autocrlf=false", bare, clone.dir)
 	clone.git("config", "user.name", "Test")
 	clone.git("config", "user.email", "test@example.com")
 	up.git("remote", "add", "origin", bare)
@@ -395,7 +400,8 @@ func TestLFSTrack(t *testing.T) {
 	}
 	r := newRepo(t)
 	out := r.do("lfs-track", text("*.bin"), yes)
-	expect(t, ".gitattributes", r.read(".gitattributes"), "*.bin filter=lfs diff=lfs merge=lfs -text\n", out)
+	// git-lfs writes CRLF on Windows.
+	expect(t, ".gitattributes", strings.ReplaceAll(r.read(".gitattributes"), "\r\n", "\n"), "*.bin filter=lfs diff=lfs merge=lfs -text\n", out)
 }
 
 func TestRunWithPreviewAndUndo(t *testing.T) {
@@ -531,4 +537,24 @@ func TestBisectRecipe(t *testing.T) {
 		t.Fatalf("bisect didn't find c3:\n%s", out)
 	}
 	expect(t, "back on main", r.git("branch", "--show-current"), "main", out)
+}
+
+func TestHookUndoesPlainGit(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash")
+	}
+	r := newRepo(t)
+	script, err := exec.Command(bin, "hook", "init", "bash").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(bash, "-c", string(script)+fmt.Sprintf("\ncd %q && echo dirty > f1.txt && git reset -q --hard", r.dir))
+	c.Env = append(env(t.TempDir()), "PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	expect(t, "after reset", r.read("f1.txt"), "1\n", "")
+	out := drive(t, r.dir, []string{"undo"}, yes)
+	expect(t, "after undo", r.read("f1.txt"), "dirty\n", out)
 }

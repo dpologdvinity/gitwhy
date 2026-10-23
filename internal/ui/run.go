@@ -168,7 +168,7 @@ func (a *App) execute(j job) error {
 	}
 	say("")
 
-	ok, err := confirm("Run it?", len(warnings) == 0)
+	ok, err := Confirm("Run it?", len(warnings) == 0)
 	if err != nil || !ok {
 		if err == nil {
 			say("Nothing ran.")

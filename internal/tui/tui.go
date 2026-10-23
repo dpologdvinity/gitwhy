@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/dpologdvinity/gitwhy/internal/git"
+	"github.com/dpologdvinity/gitwhy/internal/graph"
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
 )
 
@@ -60,25 +61,26 @@ func (f file) label() string {
 	return "changed"
 }
 
-type commit struct{ id, short, subject, when, author, refs string }
 type branch struct{ name, track, when, subject string }
 
 type model struct {
-	repo    *git.Repo
-	w, h    int
-	tab     int
-	cursor  [3]int
-	files   []file
-	commits []commit
-	brs     []branch
-	head    string // branch name or "HEAD (detached)"
-	ab      string // "↑2 ↓1" vs upstream
-	up      string
-	op      string
-	help    bool
-	msg     string // one-line result of the last quick action
-	detail  string
-	action  Action
+	repo   *git.Repo
+	w, h   int
+	tab    int
+	cursor [3]int
+	files  []file
+	rows   []graph.Row // Commits tab; the cursor counts commit rows only
+	all    bool        // Commits tab shows every branch
+	brs    []branch
+	head   string // branch name or "HEAD (detached)"
+	ab     string // "↑2 ↓1" vs upstream
+	up     string
+	op     string
+	help   bool
+	msg    string // one-line result of the last quick action
+	detail string
+	action Action
+	hunks  *hunkView // non-nil while zoomed into a file's hunks
 }
 
 // Run shows the TUI and returns what the user chose.
@@ -127,14 +129,10 @@ func (m *model) load() {
 	if m.head == "(detached)" {
 		m.head = "HEAD (detached)"
 	}
-	m.commits = nil
-	if log, err := r.Output("log", "--first-parent", "-n", "200", "--format=%H%x00%h%x00%s%x00%cr%x00%an%x00%D"); err == nil && log != "" {
-		for _, l := range strings.Split(log, "\n") {
-			f := strings.Split(l, "\x00")
-			if len(f) == 6 {
-				m.commits = append(m.commits, commit{f[0], f[1], f[2], f[3], f[4], f[5]})
-			}
-		}
+	// The graph walks all history when the repo has no commit-graph file: load it only when shown.
+	m.rows = nil
+	if m.tab == tabCommits {
+		m.rows, _ = graph.Load(r, m.all, 200)
 	}
 	m.brs = nil
 	if refs, err := r.Output("for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(upstream:track)%00%(committerdate:relative)%00%(subject)", "refs/heads", "refs/remotes"); err == nil && refs != "" {
@@ -160,9 +158,28 @@ func (m *model) count(tab int) int {
 	case tabChanges:
 		return len(m.files)
 	case tabCommits:
-		return len(m.commits)
+		n := 0
+		for _, row := range m.rows {
+			if row.Commit != nil {
+				n++
+			}
+		}
+		return n
 	}
 	return len(m.brs)
+}
+
+// commitAt returns the i-th commit in the graph, skipping connector rows.
+func (m *model) commitAt(i int) *graph.Commit {
+	for _, row := range m.rows {
+		if row.Commit != nil {
+			if i == 0 {
+				return row.Commit
+			}
+			i--
+		}
+	}
+	return nil
 }
 
 func (m *model) loadDetail() {
@@ -184,8 +201,8 @@ func (m *model) loadDetail() {
 			m.detail, _ = r.Output("diff", "--", f.path)
 		}
 	case tabCommits:
-		if i < len(m.commits) {
-			m.detail, _ = r.Output("show", "--stat", "--format=%h %s%n%an, %cr%n%b", m.commits[i].id, "--")
+		if c := m.commitAt(i); c != nil {
+			m.detail, _ = r.Output("show", "--stat", "--format=%h %s%n%an, %cr%n%b", c.ID, "--")
 		}
 	case tabBranches:
 		if i < len(m.brs) {
@@ -244,7 +261,7 @@ func (m *model) suggest() []string {
 	if strings.Contains(m.ab, "↓") && !strings.HasSuffix(m.ab, "↓0") {
 		s = append(s, "p pull")
 	}
-	if m.up == "" && m.head != "" && !strings.HasPrefix(m.head, "HEAD") && len(m.commits) > 0 {
+	if m.up == "" && m.head != "" && !strings.HasPrefix(m.head, "HEAD") && m.repo.OK("rev-parse", "--verify", "-q", "HEAD") {
 		s = append(s, "P publish this branch")
 	}
 	return s
@@ -269,9 +286,18 @@ func (m *model) pick(a Action) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) key(k string) (tea.Model, tea.Cmd) {
+	if m.hunks != nil {
+		return m.hunkKey(k)
+	}
 	m.msg = ""
 	i := m.cursor[m.tab]
 	n := m.count(m.tab)
+	was := m.tab
+	defer func() {
+		if m.tab != was && (m.tab == tabCommits || was == tabCommits) {
+			m.load()
+		}
+	}()
 	switch k {
 	case "q", "ctrl+c", "esc":
 		return m.pick(Action{Kind: "quit"})
@@ -310,7 +336,12 @@ func (m *model) key(k string) (tea.Model, tea.Cmd) {
 	case "P":
 		return m.pick(run("push-branch", nil))
 	case "p":
-		return m.pick(run("pull-latest", nil))
+		if m.tab != tabCommits {
+			return m.pick(run("pull-latest", nil))
+		}
+		if a, ok := m.tabKey(k, i); ok { // p copies a commit on the Commits tab
+			return m.pick(a)
+		}
 	case "C":
 		if m.op != "" {
 			return m.pick(run("continue-operation", nil))
@@ -369,6 +400,11 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			if f.conflict() {
 				return run("resolve-conflicts", recipe.Answers{"files": []string{f.path}}), true
 			}
+			if f.untracked() {
+				m.msg = "New file: press space to stage it whole"
+			} else if err := m.openHunks(f.path, !f.unstaged()); err != nil {
+				m.msg = err.Error()
+			}
 		case "d":
 			if f.untracked() {
 				return run("delete-untracked", nil), true
@@ -378,11 +414,23 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			return run("file-history", recipe.Answers{"file": f.path}), true
 		}
 	case tabCommits:
-		if i >= len(m.commits) {
+		if k == "a" {
+			m.all = !m.all
+			m.load()
 			return Action{}, false
 		}
-		c := recipe.Answers{"commit": m.commits[i].id}
+		gc := m.commitAt(i)
+		if gc == nil {
+			return Action{}, false
+		}
+		c := recipe.Answers{"commit": gc.ID}
+		if len(k) == 1 && strings.Contains("rdfsxmo", k) && !m.repo.OK("merge-base", "--is-ancestor", gc.ID, "HEAD") {
+			m.msg = "That commit isn't on your branch. Switch to its branch first, or p to copy it here."
+			return Action{}, false
+		}
 		switch k {
+		case "p":
+			return run("copy-commit", recipe.Answers{"from": gc.ID, "commit": gc.ID}), true
 		case "r":
 			return run("reword-commit", c), true
 		case "d":
@@ -396,9 +444,9 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 		case "e":
 			return run("edit-recent-commits", nil), true
 		case "b":
-			return run("new-branch", recipe.Answers{"base": m.commits[i].id}), true
+			return run("new-branch", recipe.Answers{"base": gc.ID}), true
 		case "o":
-			return run("reset-branch-to", recipe.Answers{"target": m.commits[i].id}), true
+			return run("reset-branch-to", recipe.Answers{"target": gc.ID}), true
 		case "t":
 			return run("create-tag", c), true
 		case "m":
@@ -445,7 +493,7 @@ var (
 	banner  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("3")).Padding(0, 1)
 	addLine = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	delLine = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	hunk    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	hunkCol = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 	tagCol  = map[string]lipgloss.Style{
 		"conflict":      lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
 		"staged":        lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
@@ -456,8 +504,8 @@ var (
 )
 
 var keys = [][]string{
-	{"space stage/unstage", "a stage all", "c commit", "d discard", "s stash", "H history", "enter resolve conflict"},
-	{"r reword", "d drop", "f add changes to it", "s split", "x revert", "e reorder/squash", "m move to new branch", "b branch from", "o reset branch here", "t tag"},
+	{"space stage/unstage", "a stage all", "c commit", "d discard", "s stash", "H history", "enter hunks / resolve conflict"},
+	{"r reword", "d drop", "f add changes to it", "s split", "x revert", "e reorder/squash", "m move to new branch", "b branch from", "o reset branch here", "t tag", "p copy here", "a all branches"},
 	{"enter switch", "m merge into current", "b rebase onto", "n new branch from", "c compare", "D delete"},
 }
 
@@ -487,13 +535,20 @@ func (m *model) render() string {
 	var tabs []string
 	for t, name := range tabNames {
 		label := fmt.Sprintf("%d %s (%d)", t+1, name, m.count(t))
+		if t == tabCommits && m.tab != tabCommits {
+			label = fmt.Sprintf("%d %s", t+1, name) // not loaded off this tab
+		}
 		if t == m.tab {
 			tabs = append(tabs, tabOn.Render(label))
 		} else {
 			tabs = append(tabs, faint.Render(label))
 		}
 	}
-	lines := []string{top.String(), strings.Join(tabs, "   "), ""}
+	title := strings.Join(tabs, "   ")
+	if m.hunks != nil {
+		title = m.hunkTitle()
+	}
+	lines := []string{top.String(), title, ""}
 
 	sugg := m.suggest()
 	footer := []string{""}
@@ -503,7 +558,9 @@ func (m *model) render() string {
 	if len(sugg) > 0 {
 		footer = append(footer, bold.Render("Next: ")+strings.Join(sugg, " · "))
 	}
-	if m.help {
+	if m.hunks != nil {
+		footer = append(footer, faint.Render("space "+m.hunkKeys()))
+	} else if m.help {
 		footer = append(footer, faint.Render(strings.Join(keys[m.tab], " · ")))
 		footer = append(footer, faint.Render("tab switch · / search · u undo · R what happened? · B any command · P push · p pull · ctrl+r refresh · q quit"))
 	} else {
@@ -513,8 +570,10 @@ func (m *model) render() string {
 	bodyH := max(h-len(lines)-len(footer), 3)
 	leftW := min(max(w*2/5, 30), 60)
 	rightW := w - leftW - 3
-	left := m.list(leftW, bodyH)
-	right := m.detailView(rightW, bodyH)
+	left, right := m.list(leftW, bodyH), colorDiff(m.detail, rightW, bodyH)
+	if m.hunks != nil {
+		left, right = m.hunkList(leftW, bodyH), m.hunkDetail(rightW, bodyH)
+	}
 	for r := 0; r < bodyH; r++ {
 		l, rr := "", ""
 		if r < len(left) {
@@ -541,16 +600,26 @@ func (m *model) list(w, h int) []string {
 			rows = append(rows, tagCol[tag].Render(fmt.Sprintf("%-13s", tag))+" "+f.path)
 		}
 	case tabCommits:
-		if len(m.commits) == 0 {
+		if len(m.rows) == 0 {
 			return []string{faint.Render("No commits yet.")}
 		}
-		for _, c := range m.commits {
-			refs := ""
-			if c.refs != "" {
-				refs = " " + tabOn.UnsetUnderline().Render("("+c.refs+")")
+		cur, k := -1, 0
+		for i, row := range m.rows {
+			line := graphArt(row.Graph)
+			if c := row.Commit; c != nil {
+				if k == m.cursor[tabCommits] {
+					cur = i
+				}
+				k++
+				refs := ""
+				if c.Refs != "" {
+					refs = " " + tabOn.UnsetUnderline().Render("("+c.Refs+")")
+				}
+				line += " " + faint.Render(c.Short) + " " + c.Subject + refs
 			}
-			rows = append(rows, faint.Render(c.short)+" "+c.subject+refs)
+			rows = append(rows, line)
 		}
+		return scroll(rows, cur, w, h)
 	case tabBranches:
 		for _, b := range m.brs {
 			mark := "  "
@@ -560,8 +629,11 @@ func (m *model) list(w, h int) []string {
 			rows = append(rows, mark+b.name+" "+faint.Render(b.track+" "+b.when))
 		}
 	}
-	// Scroll so the cursor stays visible.
-	cur := m.cursor[m.tab]
+	return scroll(rows, m.cursor[m.tab], w, h)
+}
+
+// scroll shows the h rows around cur, truncated to w, with cur highlighted.
+func scroll(rows []string, cur, w, h int) []string {
 	start := 0
 	if cur >= h {
 		start = cur - h + 1
@@ -577,9 +649,9 @@ func (m *model) list(w, h int) []string {
 	return out
 }
 
-func (m *model) detailView(w, h int) []string {
+func colorDiff(text string, w, h int) []string {
 	var out []string
-	for _, l := range strings.Split(m.detail, "\n") {
+	for _, l := range strings.Split(text, "\n") {
 		if len(out) == h {
 			break
 		}
@@ -592,11 +664,24 @@ func (m *model) detailView(w, h int) []string {
 		case strings.HasPrefix(l, "-"):
 			l = delLine.Render(l)
 		case strings.HasPrefix(l, "@@"):
-			l = hunk.Render(l)
+			l = hunkCol.Render(l)
 		}
 		out = append(out, l)
 	}
 	return out
+}
+
+// graphArt colors each column of git's graph drawing so lanes are easy to follow.
+func graphArt(g string) string {
+	var b strings.Builder
+	for col, r := range g {
+		if r == ' ' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprint(2 + col%5))).Render(string(r)))
+	}
+	return b.String()
 }
 
 func trunc(s string, w int) string { return ansi.Truncate(s, w, "…") }
