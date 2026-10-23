@@ -25,6 +25,17 @@ jobs:
         env:
           GITWHY_TEST_AUTOCRLF: "true"
         run: go test ./cmd/gitwhy/ -run 'TestMakeBranchMatchRemote|TestRecoverPlainGitPull|TestDeleteBranchUsesItsUpstream|TestPushedCommitWarning'
+      - name: install.ps1 (PowerShell 7 and Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:GITWHY_BIN_DIR = Join-Path $env:RUNNER_TEMP 'gw-pwsh7'
+          ./install.ps1
+          & "$env:GITWHY_BIN_DIR\gitwhy.exe" version
+          $env:GITWHY_BIN_DIR = Join-Path $env:RUNNER_TEMP 'gw-ps5'
+          powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed under Windows PowerShell" }
+          & "$env:GITWHY_BIN_DIR\gitwhy.exe" version
       - if: runner.os == 'Linux'
         uses: golangci/golangci-lint-action@v9
         with:
