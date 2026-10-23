@@ -1,2 +1,7 @@
 /gitwhy
 /dist/
+/npm/vendor/
+/npm/node_modules/
+/npm/LICENSE
+/npm/README.md
+/npm/*.tgz
