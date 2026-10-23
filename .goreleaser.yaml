@@ -46,7 +46,6 @@ scoops:
     homepage: https://github.com/dpologdvinity/gitwhy
     description: Do anything with git without looking it up, with previews and undo
     license: MIT
-<<<<<<< Updated upstream
 winget:
   - name: gitwhy
     package_identifier: dpologdvinity.gitwhy
@@ -68,7 +67,6 @@ winget:
           owner: microsoft
           name: winget-pkgs
           branch: master
-=======
 aurs:
   - name: gitwhy-bin
     homepage: https://github.com/dpologdvinity/gitwhy
@@ -81,6 +79,5 @@ aurs:
     private_key: '{{ index .Env "AUR_KEY" }}'
     # Without a key (no AUR account yet) skip the upload instead of failing the release.
     skip_upload: '{{ if index .Env "AUR_KEY" }}false{{ else }}true{{ end }}'
->>>>>>> Stashed changes
 changelog:
   use: github
