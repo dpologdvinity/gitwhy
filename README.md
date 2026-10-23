@@ -83,6 +83,16 @@ leaked secret from history, the old commits stay in your local undo points until
 Undo leaves alone any branch that changed after the action (for example a commit you made later in
 plain git, or work in another worktree), and tells you which.
 
+## Undo for plain git (optional)
+
+```sh
+gitwhy hook install
+```
+
+This wraps `git` in your shell so `gitwhy undo` works for commands you type yourself. It snapshots
+before risky commands only (like `reset --hard` or `clean -fd`), costs about 30 ms otherwise, and works
+in bash and zsh. Set `GITWHY_HOOK_OFF=1` to pause it; `gitwhy hook uninstall` removes it.
+
 ## Development
 
 ```sh

@@ -532,3 +532,23 @@ func TestBisectRecipe(t *testing.T) {
 	}
 	expect(t, "back on main", r.git("branch", "--show-current"), "main", out)
 }
+
+func TestHookUndoesPlainGit(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash")
+	}
+	r := newRepo(t)
+	script, err := exec.Command(bin, "hook", "init", "bash").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(bash, "-c", string(script)+fmt.Sprintf("\ncd %q && echo dirty > f1.txt && git reset -q --hard", r.dir))
+	c.Env = append(env(t.TempDir()), "PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	expect(t, "after reset", r.read("f1.txt"), "1\n", "")
+	out := drive(t, r.dir, []string{"undo"}, yes)
+	expect(t, "after undo", r.read("f1.txt"), "dirty\n", out)
+}
