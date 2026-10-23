@@ -1,6 +1,10 @@
 package hook
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dpologdvinity/gitwhy/internal/snapshot"
@@ -53,5 +57,61 @@ func TestPreThenUndo(t *testing.T) {
 	}
 	if got := r.Read("f.txt"); got != "dirty\n" {
 		t.Fatalf("f.txt = %q", got)
+	}
+}
+
+func TestHookScriptKeepsExitCode(t *testing.T) {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash")
+	}
+	script, err := Script("bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	f := filepath.Join(dir, "t.sh")
+	if err := os.WriteFile(f, []byte(script+"\ngit rev-parse --verify nope; echo rc=$?\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(bash, f)
+	c.Dir = dir
+	c.Env = append(os.Environ(), "PATH="+filepath.Dir(gitPath)) // gitwhy not on PATH
+	out, _ := c.CombinedOutput()
+	if !strings.Contains(string(out), "rc=128") {
+		t.Fatalf("output:\n%s", out)
+	}
+	if _, err := Script("fish"); err == nil || !strings.Contains(err.Error(), "only bash and zsh") {
+		t.Fatalf("fish err = %v", err)
+	}
+}
+
+func TestInstallIdempotentAndUninstall(t *testing.T) {
+	rc := filepath.Join(t.TempDir(), ".bashrc")
+	if err := os.WriteFile(rc, []byte("export A=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{true, false} {
+		changed, err := Install(rc, "bash")
+		if err != nil || changed != want {
+			t.Fatalf("install %d: changed=%v err=%v", i, changed, err)
+		}
+	}
+	data, _ := os.ReadFile(rc)
+	if n := strings.Count(string(data), "# >>> gitwhy hook >>>"); n != 1 || !strings.Contains(string(data), `eval "$(gitwhy hook init bash)"`) {
+		t.Fatalf("rc:\n%s", data)
+	}
+	if changed, err := Uninstall(rc); err != nil || !changed {
+		t.Fatalf("uninstall: %v %v", changed, err)
+	}
+	if data, _ := os.ReadFile(rc); string(data) != "export A=1\n" {
+		t.Fatalf("rc after uninstall = %q", data)
+	}
+	if changed, _ := Uninstall(rc); changed {
+		t.Fatal("second uninstall changed the file")
 	}
 }

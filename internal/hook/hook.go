@@ -3,6 +3,8 @@
 package hook
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -53,4 +55,65 @@ func Post(cwd, id string) {
 	if s, err := snapshot.Get(r, id); err == nil {
 		_ = snapshot.Finish(r, s)
 	}
+}
+
+const script = `git() {
+  local __gw_id __gw_rc
+  __gw_id=$(command gitwhy __pre "$@" 2>/dev/null)
+  command git "$@"
+  __gw_rc=$?
+  if [ -n "$__gw_id" ]; then command gitwhy __post "$__gw_id" >/dev/null 2>&1; fi
+  return $__gw_rc
+}
+`
+
+const (
+	begin = "# >>> gitwhy hook >>>"
+	end   = "# <<< gitwhy hook <<<"
+)
+
+// Script returns the shell function that wraps git.
+func Script(shell string) (string, error) {
+	if shell != "bash" && shell != "zsh" {
+		return "", fmt.Errorf("%q: only bash and zsh are supported", shell)
+	}
+	return script, nil
+}
+
+// Install adds the hook to a shell rc file. It does nothing if it's already there.
+func Install(rcPath, shell string) (changed bool, err error) {
+	if _, err := Script(shell); err != nil {
+		return false, err
+	}
+	data, err := os.ReadFile(rcPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	s := string(data)
+	if strings.Contains(s, begin) {
+		return false, nil
+	}
+	if s != "" && !strings.HasSuffix(s, "\n") {
+		s += "\n"
+	}
+	s += begin + "\neval \"$(gitwhy hook init " + shell + ")\"\n" + end + "\n"
+	return true, os.WriteFile(rcPath, []byte(s), 0o644)
+}
+
+// Uninstall removes the hook block from a shell rc file, leaving the rest as it was.
+func Uninstall(rcPath string) (changed bool, err error) {
+	data, err := os.ReadFile(rcPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	s := string(data)
+	i := strings.Index(s, begin+"\n")
+	j := strings.Index(s, end+"\n")
+	if i < 0 || j < i {
+		return false, nil
+	}
+	return true, os.WriteFile(rcPath, []byte(s[:i]+s[j+len(end)+1:]), 0o644)
 }
