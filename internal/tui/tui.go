@@ -568,7 +568,7 @@ func (m *model) render() string {
 	if m.msg != "" {
 		footer = append(footer, m.msg)
 	}
-	if len(sugg) > 0 {
+	if len(sugg) > 0 && m.hunks == nil { // the hints are about files, not hunks
 		footer = append(footer, bold.Render("Next: ")+strings.Join(sugg, " · "))
 	}
 	if m.hunks != nil {

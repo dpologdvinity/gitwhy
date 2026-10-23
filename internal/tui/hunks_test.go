@@ -202,3 +202,30 @@ func TestLineModeRefusedForNewAndDeletedFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestLineModeMarksPickedLinesWithCheckbox(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", numbered(10, nil))
+	r.Write("f.txt", numbered(10, map[int]string{5: "line 5\na\nb\n"}))
+	m := &model{repo: r.Repo, w: 100, h: 30}
+	m.load()
+	m.key("enter")
+	m.key("v")
+	m.key("space") // picks "+a" under the cursor
+	out := strings.Join(m.hunkDetail(80, 20), "\n")
+	if strings.Count(out, "[x]") != 1 || !strings.Contains(out, "[ ]") {
+		t.Fatalf("want one [x] and some [ ]:\n%s", out)
+	}
+}
+
+func TestNextHintsHiddenInHunkMode(t *testing.T) {
+	_, m := twoHunks(t)
+	m.w, m.h = 100, 30
+	if !strings.Contains(m.render(), "Next:") {
+		t.Fatal("file list should show Next: hints")
+	}
+	m.key("enter")
+	if out := m.render(); strings.Contains(out, "Next:") {
+		t.Fatalf("hunk mode should not show Next: hints:\n%s", out)
+	}
+}
