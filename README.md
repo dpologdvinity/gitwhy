@@ -68,7 +68,8 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 Needs git 2.38+ on Linux or WSL (Git Bash and macOS untested for now).
 
-Build from source (Go 1.24+):
+Download a binary from [Releases](https://github.com/dpologdvinity/gitwhy/releases), unpack it, and put
+`gitwhy` on your `PATH` (e.g. `~/.local/bin`). Or build from source (Go 1.24+):
 
 ```sh
 git clone https://github.com/dpologdvinity/gitwhy && cd gitwhy
@@ -101,4 +102,8 @@ python3 scripts/build_index.py      # rebuild docs/README.md
 ```
 
 Docs are original plain-English descriptions (git's own docs are GPL-2.0; nothing is copied).
-Format: [docs/STYLE.md](docs/STYLE.md). Design: [docs/superpowers/specs](docs/superpowers/specs).
+Format: [docs/STYLE.md](docs/STYLE.md).
+
+## License
+
+MIT. `third_party/clipboard` is BSD-3-Clause (github.com/atotto/clipboard, changed to detect tools lazily).

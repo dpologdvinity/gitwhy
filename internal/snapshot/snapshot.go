@@ -383,9 +383,13 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 	}
 	for _, k := range sparseKeys {
 		if v := s.Sparse[k]; v != "" {
-			r.Output("config", k, v)
-		} else {
-			r.Output("config", "--unset", k)
+			if _, err := r.Output("config", k, v); err != nil {
+				return res, fmt.Errorf("restoring %s: %w", k, err)
+			}
+		} else if r.OK("config", "--get", k) {
+			if _, err := r.Output("config", "--unset", k); err != nil {
+				return res, fmt.Errorf("restoring %s: %w", k, err)
+			}
 		}
 	}
 	idx := filepath.Join(r.GitDir, "index")

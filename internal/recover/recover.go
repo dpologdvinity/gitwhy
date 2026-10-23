@@ -99,13 +99,6 @@ func Events(repo *git.Repo, n int) ([]Event, error) {
 	return out, nil
 }
 
-func short(id string) string {
-	if len(id) > 7 {
-		return id[:7]
-	}
-	return id
-}
-
 func count(repo *git.Repo, rng string) int {
 	out, err := repo.Output("rev-list", "--count", "--no-merges", rng, "--")
 	if err != nil {

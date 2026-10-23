@@ -84,7 +84,7 @@ func (a *App) plan(j job) ([]planned, []string, error) {
 func (a *App) runner(j job) *git.Repo {
 	r := *a.Repo
 	if j.literal != nil && a.Cwd != "" {
-		r.Runner.Dir = a.Cwd
+		r.Dir = a.Cwd
 	}
 	return &r
 }
@@ -185,7 +185,11 @@ func (a *App) execute(j job) error {
 		return fmt.Errorf("couldn't save an undo point, so nothing ran: %w", err)
 	}
 	// Record the refs after the command, even if it failed, so undo knows what it changed.
-	defer snapshot.Finish(a.Repo, snap)
+	defer func() {
+		if err := snapshot.Finish(a.Repo, snap); err != nil {
+			warn("Couldn't record the result for undo (" + err.Error() + "); undo will restore everything, including later changes.")
+		}
+	}()
 
 	if j.literal != nil {
 		return a.runOne(where, recipe.Step{}, j.literal, j.ans)

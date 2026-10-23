@@ -247,7 +247,7 @@ func (a *App) Run(args []string) error {
 			return gitIn(wd, args)
 		}
 		r2 := *r
-		r2.Runner.Dir = a.Cwd
+		r2.Dir = a.Cwd
 		return r2.Interactive(args...)
 	}
 	return a.execute(job{title: "git " + shellJoin(args), literal: args})

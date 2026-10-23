@@ -1,0 +1,17 @@
+version: "2"
+linters:
+  settings:
+    errcheck:
+      # Best-effort cleanup and terminal output: failures here don't change the result.
+      exclude-functions:
+        - os.Remove
+        - os.RemoveAll
+        - (*os.File).Close
+        - path/filepath.WalkDir
+        - charm.land/lipgloss/v2.Println
+        - (github.com/dpologdvinity/gitwhy/internal/git.Runner).Output
+        - (*github.com/dpologdvinity/gitwhy/internal/git.Repo).Output
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [errcheck]
