@@ -15,7 +15,7 @@ questions:
       - {label: "Only if it's a fast-forward", value: "--ff-only"}
   - {id: message, ask: "Message for the squash commit", type: text, when: '{{eq .mode "--squash"}}'}
 steps:
-  - git: [merge, "{{.mode}}", --no-edit, "{{.from}}"]
+  - git: [merge, "{{if .mode}}{{.mode}}{{end}}", --no-edit, "{{.from}}"]
     when: '{{ne .mode "--squash"}}'
   - git: [merge, --squash, "{{.from}}"]
     when: '{{eq .mode "--squash"}}'

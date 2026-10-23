@@ -64,7 +64,7 @@ func New(k *kb.KB, rs []*recipe.Recipe) *Index {
 				r:      Result{Kind: Flag, Cmd: name, Flag: f, Title: "git " + name + " " + f.Display, Detail: f.Desc},
 				title:  words(name + " " + strings.Join(f.Spellings, " ")),
 				body:   words(f.Desc),
-				weight: 0.5,
+				weight: 0.3,
 			})
 		}
 	}

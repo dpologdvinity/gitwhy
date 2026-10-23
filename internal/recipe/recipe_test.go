@@ -55,12 +55,12 @@ func hasID(rs []*Recipe, id string) bool {
 }
 
 func TestArgsSplatAndDrop(t *testing.T) {
-	s := Step{Git: []string{"merge", "{{.mode}}", "--", "{{.files}}", "x{{.n}}"}}
-	got, err := Args(s, Answers{"mode": "", "files": []string{"a b", "c"}, "n": "1"})
+	s := Step{Git: []string{"merge", "{{if .mode}}{{.mode}}{{end}}", "--", "{{.files}}", "x{{.n}}", "-m", "{{.msg}}"}}
+	got, err := Args(s, Answers{"mode": "", "files": []string{"a b", "c"}, "n": "1", "msg": ""})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"merge", "--", "a b", "c", "x1"}
+	want := []string{"merge", "--", "a b", "c", "x1", "-m", ""}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q want %q", got, want)
 	}

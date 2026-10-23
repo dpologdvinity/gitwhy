@@ -20,8 +20,8 @@ type Recipe struct {
 	Title     string     `yaml:"title"`
 	Aliases   []string   `yaml:"aliases"`
 	Category  string     `yaml:"category"`
-	Explain   string     `yaml:"explain"`   // shown before the questions
-	Predict   string     `yaml:"predict"`   // template: plain-English effect
+	Explain   string     `yaml:"explain"` // shown before the questions
+	Predict   string     `yaml:"predict"` // template: plain-English effect
 	Checks    []Check    `yaml:"checks"`
 	Questions []Question `yaml:"questions"`
 	Steps     []Step     `yaml:"steps"`
@@ -44,10 +44,10 @@ type Question struct {
 	Options  []Option `yaml:"options"`
 	Default  string   `yaml:"default"`
 	Optional bool     `yaml:"optional"`
-	When     string   `yaml:"when"` // template; ask only if it renders truthy
+	When     string   `yaml:"when"`  // template; ask only if it renders truthy
 	Split    bool     `yaml:"split"` // text: split the answer on spaces into a list
 	// For branch/commit/files/todo pickers.
-	Source  string   `yaml:"source"`  // branch: local, remote, all; files: changed, staged, unstaged, conflicted, untracked; commit/todo: revision range (template)
+	Source  string   `yaml:"source"` // branch: local, remote, all; files: changed, staged, unstaged, conflicted, untracked; commit/todo: revision range (template)
 	Multi   bool     `yaml:"multi"`
 	Actions []string `yaml:"actions"` // todo: allowed actions besides reorder (drop, squash, fixup, reword)
 }
@@ -130,7 +130,9 @@ func Truthy(tmpl string, a Answers) (bool, error) {
 
 var soloVar = regexp.MustCompile(`^\{\{\s*\.(\w+)\s*\}\}$`)
 
-// Args renders a step's git args. A list answer used alone splats; empty args are dropped.
+// Args renders a step's git args. A list answer used alone splats. An element that starts with
+// "{{if" is optional and dropped when it renders empty; any other empty value stays as "" so a
+// missing answer can't silently change the command.
 func Args(s Step, a Answers) ([]string, error) {
 	var out []string
 	for _, el := range s.Git {
@@ -144,9 +146,10 @@ func Args(s Step, a Answers) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("step %v: %w", s.Git, err)
 		}
-		if v != "" {
-			out = append(out, v)
+		if v == "" && strings.HasPrefix(strings.TrimSpace(el), "{{if") {
+			continue
 		}
+		out = append(out, v)
 	}
 	return out, nil
 }

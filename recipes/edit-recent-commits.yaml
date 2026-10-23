@@ -14,6 +14,7 @@ questions:
     help: "squash = merge into the commit above and combine messages; fixup = merge into the commit above, keep its message."
 steps:
   - git: [rebase, -i, --autostash, "{{.plan_base}}"]
+    env: [GIT_EDITOR=true]
     todo:
       - {action: plan, plan: "{{.plan}}"}
 predict: The selected commits are rewritten in the new order. All of them get new IDs.

@@ -119,7 +119,9 @@ var rules = []rule{
 	{"stash", sub("drop", "clear"), "Deletes stashed changes."},
 	{"stash", sub("pop"), "Removes the stash after applying (kept if it conflicts)."},
 	{"commit", has("--amend"), "Replaces the last commit (new ID); force-push needed if already pushed."},
-	{"rebase", func(a Args) bool { return !a.Has("--abort", "--continue", "--skip", "--quit", "--edit-todo", "--show-current-patch") }, "Rewrites commits (new IDs); force-push needed if already pushed."},
+	{"rebase", func(a Args) bool {
+		return !a.Has("--abort", "--continue", "--skip", "--quit", "--edit-todo", "--show-current-patch")
+	}, "Rewrites commits (new IDs); force-push needed if already pushed."},
 	{"rebase", has("--abort"), "Discards the rebase, including conflict fixes."},
 	{"merge", has("--abort"), "Discards the merge, including conflict fixes."},
 	{"cherry-pick", has("--abort"), "Discards the cherry-pick, including conflict fixes."},

@@ -133,13 +133,13 @@ var (
 // Parse parses one command file. Name is "" for files without "# git <name>".
 func Parse(md string) *Command {
 	c := &Command{}
-	var sub *Sub      // current "### git <cmd> <sub>" section
+	var sub *Sub        // current "### git <cmd> <sub>" section
 	inSubTable := false // inside the "## Subcommands" table
 	summaryDone := false
 	var para []string
 
 	sc := bufio.NewScanner(strings.NewReader(md))
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	inFence := false
 	for sc.Scan() {
 		line := sc.Text()
