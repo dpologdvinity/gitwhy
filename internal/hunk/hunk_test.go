@@ -117,3 +117,19 @@ func TestParseBinaryAndModeOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestPatchReverseWithSelectionUnstagesOnlyPickedLines(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n2\n4\n")
+	r.Write("f.txt", "1\nX\nY\n4\n")
+	r.Git("add", "f.txt")
+	fd := parse(t, r, "--cached")
+	sel := make([]bool, len(fd.Hunks[0].Lines))
+	for i, l := range fd.Hunks[0].Lines {
+		sel[i] = l == "-2"
+	}
+	apply(t, r, fd.Patch(0, sel, true), true)
+	if got := r.Git("show", ":f.txt"); got != "1\n2\nX\nY\n4" {
+		t.Fatalf("index = %q", got)
+	}
+}
