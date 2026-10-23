@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dpologdvinity/gitwhy/internal/danger"
@@ -119,10 +120,22 @@ func Uninstall(rcPath string) (changed bool, err error) {
 		return false, err
 	}
 	s := string(data)
-	i := strings.Index(s, begin+"\n")
-	j := strings.Index(s, end+"\n")
-	if i < 0 || j < i {
+	i := strings.Index(s, begin)
+	if i < 0 {
 		return false, nil
 	}
-	return true, os.WriteFile(rcPath, []byte(s[:i]+s[j+len(end)+1:]), 0o644)
+	j := strings.Index(s[i:], end)
+	if j < 0 {
+		return false, fmt.Errorf("%s has %q but no end marker %q: remove those lines by hand", rcPath, begin, end)
+	}
+	rest := strings.TrimPrefix(s[i+j+len(end):], "\n")
+	return true, os.WriteFile(rcPath, []byte(s[:i]+rest), 0o644)
+}
+
+// RCPath is the startup file the hook goes in: ~/.bashrc, or $ZDOTDIR/.zshrc (default ~/.zshrc).
+func RCPath(shell, home string) string {
+	if z := os.Getenv("ZDOTDIR"); shell == "zsh" && z != "" {
+		home = z
+	}
+	return filepath.Join(home, "."+shell+"rc")
 }

@@ -22,6 +22,12 @@ type hunkView struct {
 }
 
 func (m *model) openHunks(path string, staged bool) error {
+	for _, f := range m.files {
+		// Limited to one path, git can't pair the rename, so the staged side would look like a whole new file.
+		if f.path == path && f.moved && staged {
+			return errors.New("renamed file: press space to stage it whole")
+		}
+	}
 	// Pin the output format: user config (color, prefixes, external diff) would break parsing and apply.
 	args := []string{"-c", "diff.suppressBlankEmpty=false", "diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"}
 	if staged {
@@ -71,6 +77,12 @@ func (m *model) hunkKey(k string) (tea.Model, tea.Cmd) {
 			m.msg = "✗ " + strings.TrimSpace(err.Error())
 		}
 	case "v":
+		for _, l := range v.fd.Header {
+			if strings.HasPrefix(l, "new file mode") || strings.HasPrefix(l, "deleted file mode") {
+				m.msg = "This file is entirely added or deleted: stage it whole with space."
+				return m, nil
+			}
+		}
 		if v.fd.Hunks[v.cur].NoEOL() {
 			m.msg = "This hunk touches the end of a file with no final newline: stage it whole with space."
 			return m, nil

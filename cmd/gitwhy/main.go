@@ -169,11 +169,11 @@ func hookCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		rc := filepath.Join(home, "."+shell+"rc")
+		rc := hook.RCPath(shell, home)
 		if args[0] == "uninstall" {
 			changed := false
 			for _, sh := range []string{"bash", "zsh"} {
-				c, err := hook.Uninstall(filepath.Join(home, "."+sh+"rc"))
+				c, err := hook.Uninstall(hook.RCPath(sh, home))
 				if err != nil {
 					return err
 				}
