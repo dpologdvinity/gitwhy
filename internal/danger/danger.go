@@ -1,7 +1,10 @@
 // Package danger warns about git commands that can lose work or rewrite shared history.
 package danger
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // Args is a parsed command line (without the leading "git").
 type Args struct {
@@ -194,6 +197,20 @@ var Subs = map[string]bool{
 	"drop": true, "clear": true, "pop": true, "apply": true, "push": true, "list": true, "show": true,
 	"migrate": true, "prune": true, "expire": true, "delete": true, "remove": true, "rm": true, "add": true,
 	"set": true, "reapply": true, "deinit": true, "update": true, "init": true, "track": true,
+}
+
+// Commands lists every git command that has a warning rule, sorted.
+func Commands() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range rules {
+		if !seen[r.cmd] {
+			seen[r.cmd] = true
+			out = append(out, r.cmd)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Warnings returns plain-English warnings for a command line (without the leading "git").

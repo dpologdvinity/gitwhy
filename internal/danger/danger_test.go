@@ -44,3 +44,16 @@ func TestWarnings(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandsListsRuleCommands(t *testing.T) {
+	got := Commands()
+	has := map[string]bool{}
+	for _, c := range got {
+		has[c] = true
+	}
+	for _, want := range []string{"reset", "clean", "rebase", "checkout"} {
+		if !has[want] {
+			t.Errorf("Commands() missing %q: %v", want, got)
+		}
+	}
+}
