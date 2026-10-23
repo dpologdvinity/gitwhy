@@ -8,6 +8,8 @@ questions:
   - {id: commit, ask: "Oldest commit to move", type: commit, source: HEAD}
   - {id: target, ask: "Move them to which branch?", type: branch, source: local}
 steps:
+  - when: '{{eq .commit_base "--root"}}'
+    fail: "That's the very first commit; there's nothing before it. Pick a later one."
   - git: [switch, "{{.target}}"]
   - git: [cherry-pick, "{{.commit_base}}..{{.branch}}"]
   - git: [switch, "{{.branch}}"]

@@ -36,6 +36,8 @@ func (a *App) builtins() recipe.Answers {
 	}
 	ans["remote"] = remote
 	ans["op"] = recipe.InProgress(r)
+	locals, _ := r.Output("for-each-ref", "--format=%(refname)", "refs/heads", "refs/tags")
+	ans["local_refs"] = strings.Fields(locals)
 	return ans
 }
 
@@ -209,6 +211,10 @@ func (a *App) askBranch(q *recipe.Question, title, def string, ans recipe.Answer
 	}
 	err = prompt(huh.NewSelect[string]().Title(title).Description("Type / to filter").Options(opts...).Value(&v).Filtering(false).Height(min(len(opts)+2, 15)))
 	ans[q.ID] = v
+	// Where a local branch pushes/pulls: its exact remote and remote branch name.
+	ans[q.ID+"_remote"], _ = a.Repo.Output("config", "branch."+v+".remote")
+	merge, _ := a.Repo.Output("config", "branch."+v+".merge")
+	ans[q.ID+"_merge"] = strings.TrimPrefix(merge, "refs/heads/")
 	return err
 }
 
@@ -217,7 +223,7 @@ func (a *App) askCommit(q *recipe.Question, title string, ans recipe.Answers) er
 	if q.Source != "" {
 		src, _ = recipe.Render(q.Source, ans)
 	}
-	out, err := a.Repo.Output("log", "-n", "60", "--format=%H%x00%h %s%x00%cr, %an", src, "--")
+	out, err := a.Repo.Output("log", "--first-parent", "-n", "60", "--format=%H%x00%h %s%x00%cr, %an", src, "--")
 	if err != nil {
 		return err
 	}
@@ -243,7 +249,14 @@ func (a *App) askCommit(q *recipe.Question, title string, ans recipe.Answers) er
 	}
 	files, _ := a.Repo.Output("diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "-z", v)
 	ans[q.ID+"_files"] = splitZ(files)
+	ans[q.ID+"_pushed"] = a.pushed(v)
 	return nil
+}
+
+// pushed reports ("true"/"false") whether a commit is on any remote-tracking branch.
+func (a *App) pushed(commit string) string {
+	out, _ := a.Repo.Output("branch", "-r", "--contains", commit)
+	return fmt.Sprint(strings.TrimSpace(out) != "")
 }
 
 func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) error {
@@ -299,6 +312,9 @@ func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) err
 		Validate(func(s []string) error {
 			if len(s) == 0 {
 				return fmt.Errorf("pick at least one")
+			}
+			if q.Partial && len(s) == len(files) {
+				return fmt.Errorf("leave at least one file for the other part")
 			}
 			return nil
 		}))
@@ -461,6 +477,7 @@ func (a *App) askTodo(q *recipe.Question, title string, ans recipe.Answers) erro
 	} else {
 		ans[q.ID+"_base"] = "--root"
 	}
+	ans[q.ID+"_pushed"] = a.pushed(oldest)
 	return nil
 }
 

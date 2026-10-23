@@ -4,11 +4,12 @@ category: rewrite history
 checks:
   - {if: no-commits, block: "There are no commits yet."}
   - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
-  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Changing a message rewrites history; you will need to force-push."}
 questions:
   - {id: commit, ask: "Which commit?", type: commit, source: HEAD}
   - {id: message, ask: "New message", type: text}
 steps:
+  - when: '{{eq .commit_pushed "true"}}'
+    warn: "That commit is already on the remote. Changing its message rewrites shared history; you'll need to force-push."
   - when: '{{eq .commit .head}}'
     git: [commit, --amend, --only, -m, "{{.message}}"]
   - when: '{{ne .commit .head}}'

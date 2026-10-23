@@ -11,6 +11,7 @@ func TestWarnings(t *testing.T) {
 		"reset --soft HEAD~1":          0,
 		"clean -fdx":                   2,
 		"clean -n":                     0,
+		"clean -dn":                    0,
 		"push origin main":             0,
 		"push --force-with-lease":      1,
 		"push origin +main":            1,
@@ -27,6 +28,15 @@ func TestWarnings(t *testing.T) {
 		"rebase --continue":            0,
 		"status":                       0,
 		"worktree remove --force ../x": 2,
+		"reset --ha":                   1,
+		"push --forc":                  1,
+		"checkout .":                   1,
+		"checkout main a.txt":          1,
+		"checkout main":                0,
+		"checkout -b new":              0,
+		"switch -C main":               1,
+		"mv -f a b":                    1,
+		"clean -d":                     1,
 	}
 	for cmd, want := range cases {
 		if got := Warnings(strings.Fields(cmd)); len(got) != want {

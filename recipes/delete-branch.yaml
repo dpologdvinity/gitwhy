@@ -16,10 +16,12 @@ questions:
     default: "false"
     when: '{{ne .where "remote"}}'
 steps:
+  - when: '{{and (ne .where "local") (not .target_remote)}}'
+    fail: "{{.target}} doesn't track a remote branch, so gitwhy can't tell which remote branch to delete."
   - when: '{{and (ne .where "remote") (ne .force "true")}}'
     git: [branch, -d, "{{.target}}"]
   - when: '{{and (ne .where "remote") (eq .force "true")}}'
     git: [branch, -D, "{{.target}}"]
   - when: '{{ne .where "local"}}'
-    git: [push, "{{.remote}}", --delete, "{{.target}}"]
-predict: "Branch {{.target}} is deleted{{if eq .where \"local\"}} locally{{else if eq .where \"remote\"}} on {{.remote}}{{else}} locally and on {{.remote}}{{end}}. Its commits stay recoverable for a while via gitwhy recover."
+    git: [push, "{{.target_remote}}", --delete, "{{.target_merge}}"]
+predict: "Branch {{.target}} is deleted{{if eq .where \"local\"}} locally{{else if eq .where \"remote\"}} on {{.target_remote}} (as {{.target_merge}}){{else}} locally and on {{.target_remote}} (as {{.target_merge}}){{end}}. Its commits stay recoverable for a while via gitwhy recover."

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/dpologdvinity/gitwhy/internal/danger"
+	"github.com/dpologdvinity/gitwhy/internal/git"
 	"github.com/dpologdvinity/gitwhy/internal/preview"
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
 	"github.com/dpologdvinity/gitwhy/internal/snapshot"
@@ -27,9 +28,14 @@ type planned struct {
 	args []string
 }
 
-func (a *App) plan(j job) ([]planned, error) {
+// stopError is a recipe "fail" step: shown plainly, nothing ran.
+type stopError struct{ msg string }
+
+func (e stopError) Error() string { return e.msg }
+
+func (a *App) plan(j job) ([]planned, []string, error) {
 	if j.literal != nil {
-		return []planned{{args: j.literal}}, nil
+		return []planned{{args: j.literal}}, nil, nil
 	}
 	shown := recipe.Answers{}
 	for k, v := range j.ans {
@@ -43,24 +49,44 @@ func (a *App) plan(j job) ([]planned, error) {
 		}
 	}
 	var out []planned
+	var warns []string
 	for _, s := range j.steps {
 		if s.Ask != "" {
 			continue
 		}
 		ok, err := recipe.Truthy(s.When, shown)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !ok {
 			continue
 		}
+		if s.Fail != "" {
+			msg, _ := recipe.Render(s.Fail, shown)
+			return nil, nil, stopError{msg}
+		}
+		if s.Warn != "" {
+			msg, _ := recipe.Render(s.Warn, shown)
+			warns = append(warns, msg)
+			continue
+		}
 		args, err := recipe.Args(s, shown)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out = append(out, planned{step: s, args: args})
 	}
-	return out, nil
+	return out, warns, nil
+}
+
+// runner returns where a job's commands run: recipes at the repo root (their file paths are
+// root-relative), literal commands in the folder the user ran gitwhy from.
+func (a *App) runner(j job) *git.Repo {
+	r := *a.Repo
+	if j.literal != nil && a.Cwd != "" {
+		r.Runner.Dir = a.Cwd
+	}
+	return &r
 }
 
 // execute previews, explains, confirms, snapshots and runs a job.
@@ -68,10 +94,16 @@ func (a *App) execute(j job) error {
 	if err := a.needRepo(); err != nil {
 		return err
 	}
-	steps, err := a.plan(j)
+	steps, extraWarn, err := a.plan(j)
+	if se, ok := err.(stopError); ok {
+		say("%s", badStyle.Render("✗ "+se.msg))
+		say("Nothing ran.")
+		return ErrCancelled
+	}
 	if err != nil {
 		return err
 	}
+	where := a.runner(j)
 	if len(steps) == 0 {
 		say("Nothing to do.")
 		return nil
@@ -82,7 +114,7 @@ func (a *App) execute(j job) error {
 	var save []string
 	exact := false
 	if len(steps) == 1 {
-		p := preview.Preview(a.Repo, steps[0].args)
+		p := preview.Preview(where, steps[0].args)
 		if p.Exact {
 			exact = true
 			for _, l := range p.Lines {
@@ -105,7 +137,7 @@ func (a *App) execute(j job) error {
 	}
 
 	// Dangers.
-	var warnings []string
+	warnings := extraWarn
 	seen := map[string]bool{}
 	for _, s := range steps {
 		for _, w := range danger.Warnings(s.args) {
@@ -152,10 +184,11 @@ func (a *App) execute(j job) error {
 	if err != nil {
 		return fmt.Errorf("couldn't save an undo point, so nothing ran: %w", err)
 	}
-	_ = snap
+	// Record the refs after the command, even if it failed, so undo knows what it changed.
+	defer snapshot.Finish(a.Repo, snap)
 
 	if j.literal != nil {
-		return a.runOne(recipe.Step{}, j.literal, j.ans)
+		return a.runOne(where, recipe.Step{}, j.literal, j.ans)
 	}
 	for _, s := range j.steps {
 		if s.Ask != "" {
@@ -176,7 +209,10 @@ func (a *App) execute(j job) error {
 		if err != nil {
 			return err
 		}
-		if err := a.runOne(s, args, j.ans); err != nil {
+		if s.Fail != "" || s.Warn != "" {
+			continue
+		}
+		if err := a.runOne(where, s, args, j.ans); err != nil {
 			return err
 		}
 	}
@@ -184,7 +220,7 @@ func (a *App) execute(j job) error {
 	return nil
 }
 
-func (a *App) runOne(s recipe.Step, args []string, ans recipe.Answers) error {
+func (a *App) runOne(where *git.Repo, s recipe.Step, args []string, ans recipe.Answers) error {
 	env := append([]string{}, s.Env...)
 	if len(s.Todo) > 0 {
 		e, err := a.todoEnv(s, ans)
@@ -194,7 +230,7 @@ func (a *App) runOne(s recipe.Step, args []string, ans recipe.Answers) error {
 		env = append(env, e)
 	}
 	say("%s", dimStyle.Render("$ git "+shellJoin(args)))
-	if err := a.Repo.With(env...).Interactive(args...); err != nil {
+	if err := where.With(env...).Interactive(args...); err != nil {
 		return a.failed(err)
 	}
 	if s.Git == nil { // literal command

@@ -111,6 +111,12 @@ func Apply(planPath, todoPath string) error {
 				picks = append(picks, i)
 			}
 		}
+		for _, l := range lines {
+			if l.action != "" && !isPick(l.action) {
+				// update-ref, exec, label, merge...: moving picks around them would break them.
+				return fmt.Errorf("this rebase has %q steps; gitwhy's editor only handles plain commits", l.action)
+			}
+		}
 		if len(picks) != len(p.Full) {
 			return fmt.Errorf("plan has %d commits but the rebase has %d", len(p.Full), len(picks))
 		}

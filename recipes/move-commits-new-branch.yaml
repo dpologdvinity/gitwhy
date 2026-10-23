@@ -8,6 +8,8 @@ questions:
   - {id: name, ask: "Name of the new branch", type: text}
   - {id: switch, ask: "Switch to the new branch afterwards?", type: confirm, default: "true"}
 steps:
+  - when: '{{eq .commit_base "--root"}}'
+    fail: "That's the very first commit; there's nothing before it. Pick a later one."
   - git: [branch, "{{.name}}"]
   - git: [reset, --keep, "{{.commit_base}}"]
   - when: '{{eq .switch "true"}}'

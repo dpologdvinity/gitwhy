@@ -4,7 +4,6 @@ category: rewrite history
 checks:
   - {if: no-commits, block: "There are no commits yet."}
   - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
-  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Editing them rewrites history; you will need to force-push."}
 questions:
   - id: plan
     ask: Arrange your commits
@@ -13,7 +12,9 @@ questions:
     actions: [drop, squash, fixup, reword]
     help: "squash = merge into the commit above and combine messages; fixup = merge into the commit above, keep its message."
 steps:
-  - git: [rebase, -i, --autostash, "{{.plan_base}}"]
+  - when: '{{eq .plan_pushed "true"}}'
+    warn: "Some of these commits are already on the remote. Editing them rewrites shared history; you'll need to force-push."
+  - git: [rebase, -i, --autostash, --no-update-refs, "{{.plan_base}}"]
     env: [GIT_EDITOR=true]
     todo:
       - {action: plan, plan: "{{.plan}}"}

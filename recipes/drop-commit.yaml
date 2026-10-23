@@ -3,10 +3,11 @@ aliases: [delete commit, drop commit, remove past commit, erase commit, rewrite 
 category: rewrite history
 checks:
   - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
-  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Removing one rewrites history; you will need to force-push.", suggest: revert-commit}
 questions:
   - {id: commit, ask: "Which commit to remove?", type: commit, source: HEAD}
 steps:
+  - when: '{{eq .commit_pushed "true"}}'
+    warn: "That commit is already on the remote. Removing it rewrites shared history; you'll need to force-push."
   - git: [rebase, -i, --autostash, --rebase-merges, "{{.commit_base}}"]
     todo:
       - {action: drop, commit: "{{.commit}}"}

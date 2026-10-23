@@ -3,11 +3,14 @@ aliases: [squash, combine last commits, merge commits into one, squash commits]
 category: rewrite history
 checks:
   - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
-  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Squashing rewrites history; you will need to force-push."}
 questions:
   - {id: commit, ask: "Oldest commit to include", type: commit, source: HEAD, help: "This commit and every commit after it become one."}
   - {id: message, ask: "Message for the combined commit", type: text}
 steps:
+  - when: '{{eq .commit_base "--root"}}'
+    fail: "That's the very first commit; there's nothing before it. Pick a later one."
+  - when: '{{eq .commit_pushed "true"}}'
+    warn: "That commit is already on the remote. Squashing rewrites shared history; you'll need to force-push."
   - git: [reset, --soft, "{{.commit_base}}"]
   - git: [commit, -m, "{{.message}}"]
 predict: Every commit from {{.commit}} to the latest becomes one commit, "{{.message}}". Your uncommitted changes are untouched unless staged.

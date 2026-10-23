@@ -385,7 +385,7 @@ func TestRemoveFileFromHistory(t *testing.T) {
 	}
 	r := newRepo(t)
 	out := r.do("remove-file-from-history", text("f2.txt"), yes)
-	expect(t, "f2 in history", r.git("log", "--all", "--format=%h", "--", "f2.txt"), "", out)
+	expect(t, "f2 in history", r.git("log", "--branches", "--tags", "--format=%h", "--", "f2.txt"), "", out)
 	expect(t, "f2 file", r.read("f2.txt"), "<missing>", out)
 }
 
@@ -440,4 +440,69 @@ func TestBuilder(t *testing.T) {
 	if !strings.Contains(out, "git commit --allow-empty '--message=built it'") {
 		t.Fatalf("command not shown:\n%s", out)
 	}
+}
+
+func TestRemoveFileFromHistoryThenUndo(t *testing.T) {
+	if exec.Command("git", "filter-repo", "--version").Run() != nil {
+		t.Skip("git-filter-repo not installed")
+	}
+	r := newRepo(t)
+	before := r.git("rev-parse", "HEAD")
+	out := r.do("remove-file-from-history", text("f2.txt"), yes)
+	expect(t, "rewritten", r.git("log", "--branches", "--tags", "--format=%h", "--", "f2.txt"), "", out)
+	out = drive(t, r.dir, []string{"undo"}, yes)
+	expect(t, "undone", r.git("rev-parse", "HEAD"), before, out)
+	expect(t, "f2 back", r.read("f2.txt"), "2\n", out)
+}
+
+func TestDeleteBranchUsesItsUpstream(t *testing.T) {
+	_, c := withRemote(t)
+	c.git("push", "-q", "origin", "HEAD:refs/heads/team/fix")
+	c.git("push", "-q", "origin", "HEAD:refs/heads/fix") // someone else's branch with the same short name
+	c.git("branch", "--track", "fix", "origin/team/fix")
+	out := c.do("delete-branch", pick("fix "), pick("On my computer and on the remote"), text("y"), yes)
+	remote := c.git("ls-remote", "--heads", "origin")
+	if strings.Contains(remote, "refs/heads/team/fix") || !strings.Contains(remote, "refs/heads/fix") {
+		t.Fatalf("wrong remote branch deleted:\n%s\n%s", remote, out)
+	}
+}
+
+func TestRunFromSubfolder(t *testing.T) {
+	r := newRepo(t)
+	r.commit("sub", "sub/s.txt", "s\n")
+	r.write("f1.txt", "root edit\n")
+	r.write("sub/s.txt", "sub edit\n")
+	out := drive(t, filepath.Join(r.dir, "sub"), []string{"run", "restore", "."}, yes)
+	expect(t, "sub restored", r.read("sub/s.txt"), "s\n", out)
+	expect(t, "root kept", r.read("f1.txt"), "root edit\n", out)
+}
+
+func TestRunRefusesGlobalOptions(t *testing.T) {
+	r := newRepo(t)
+	out := drive(t, r.dir, []string{"run", "-C", "..", "reset", "--hard"})
+	if !strings.Contains(out, "global options") {
+		t.Fatalf("expected refusal:\n%s", out)
+	}
+}
+
+func TestFixupLeavesOtherStagedChanges(t *testing.T) {
+	r := newRepo(t)
+	r.write("f1.txt", "unrelated staged\n")
+	r.git("add", "f1.txt")
+	r.write("f2.txt", "2 fixed\n")
+	out := r.do("fix-past-commit", pick("f2.txt"), text("0"), commit("c2"), yes)
+	expect(t, "c2 got fix", r.git("show", "HEAD~2:f2.txt"), "2 fixed", out)
+	expect(t, "c1 untouched in history", r.git("show", "HEAD:f1.txt"), "1", out)
+	// --autostash brings the unrelated change back unstaged; it must not be lost or committed.
+	expect(t, "unrelated kept", r.read("f1.txt"), "unrelated staged\n", out)
+}
+
+func TestPushedCommitWarning(t *testing.T) {
+	_, c := withRemote(t)
+	c.commit("local only", "l.txt", "l\n")
+	out := c.do("reword-commit", commit("c2"), text("renamed"), text("n"))
+	if !strings.Contains(out, "already on the remote") {
+		t.Fatalf("no pushed warning:\n%s", out)
+	}
+	expect(t, "nothing ran", c.git("log", "-1", "--format=%s", "HEAD~2"), "c3", out)
 }

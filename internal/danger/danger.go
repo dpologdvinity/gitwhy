@@ -41,12 +41,18 @@ func Parse(args []string, subs map[string]bool) Args {
 	return a
 }
 
-// Has reports whether any of the flags is present. Short flags are one letter after "-".
+// Has reports whether any of the flags is present. Short flags are one letter after "-". Long
+// flags also match git's accepted abbreviations ("--ha" for "--hard").
 func (a Args) Has(flags ...string) bool {
 	for _, f := range flags {
 		if strings.HasPrefix(f, "--") {
 			if a.long[f] {
 				return true
+			}
+			for l := range a.long {
+				if len(l) >= 4 && strings.HasPrefix(f, l) {
+					return true
+				}
 			}
 		} else if len(f) == 2 && a.short[f[1]] {
 			return true
@@ -107,10 +113,17 @@ var rules = []rule{
 	{"reset", has("--hard"), "Deletes every uncommitted change to tracked files."},
 	{"reset", has("--merge"), "Staged changes are lost."},
 	{"checkout", has("-f", "--force"), "Discards local changes."},
-	{"checkout", func(a Args) bool { return a.dash || a.Has("--ours", "--theirs") }, "Overwrites changes in those files."},
+	{"checkout", func(a Args) bool {
+		// "checkout -- f", "checkout .", "checkout <rev> <path>": overwrite files.
+		return a.dash || a.Has("--ours", "--theirs") || contains(a.Positional(), ".") || (len(a.Positional()) >= 2 && !a.Has("-b", "-B", "--orphan"))
+	}, "Overwrites changes in those files."},
+	{"checkout", has("-B"), "Resets an existing branch to a new start point."},
+	{"switch", has("-C", "--force-create"), "Resets an existing branch to a new start point."},
+	{"mv", has("-f", "--force"), "Overwrites the destination file."},
+	{"submodule", func(a Args) bool { return a.Sub == "update" && a.Has("-f", "--force") }, "Discards local changes in submodules."},
 	{"restore", func(a Args) bool { return !a.Has("-S", "--staged") || a.Has("-W", "--worktree") }, "Discards unstaged changes in those files."},
 	{"switch", has("-f", "--force", "--discard-changes"), "Discards local changes and overwrites untracked files in the way."},
-	{"clean", has("-f", "--force"), "Deletes untracked files from disk."},
+	{"clean", func(a Args) bool { return !a.Has("-n", "--dry-run", "-i", "--interactive") }, "Deletes untracked files from disk."},
 	{"clean", has("-x", "-X"), "Also deletes ignored files (.env, build output, node_modules)."},
 	{"rm", func(a Args) bool { return !a.Has("--cached") }, "Deletes the files from disk too."},
 	{"branch", has("-D"), "Deletes the branch even if its commits aren't merged anywhere."},
@@ -150,7 +163,7 @@ var rules = []rule{
 	}, "Deletes branches or tags on the remote." + unrecoverable},
 	{"push", has("--mirror", "--prune"), "Deletes remote branches you don't have locally." + unrecoverable},
 	{"push", has("--mirror"), "Also pushes gitwhy's undo refs (refs/gitwhy/*)."},
-	{"filter-repo", always, "Rewrites all history; every commit ID changes and the 'origin' remote is removed."},
+	{"filter-repo", always, "Rewrites history; commit IDs change. Without --refs it also expires old history and removes the 'origin' remote."},
 	{"filter-branch", always, "Rewrites history; every affected commit ID changes."},
 	{"lfs", sub("migrate"), "Can rewrite history (import/export); commit IDs change."},
 	{"lfs", sub("prune"), "Deletes local LFS files not needed by recent commits."},
@@ -195,4 +208,13 @@ func Warnings(args []string) []string {
 		}
 	}
 	return out
+}
+
+func contains(xs []string, x string) bool {
+	for _, y := range xs {
+		if y == x {
+			return true
+		}
+	}
+	return false
 }

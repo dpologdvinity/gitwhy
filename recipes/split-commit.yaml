@@ -4,13 +4,16 @@ category: rewrite history
 checks:
   - {if: dirty-tree, block: "Commit or stash your uncommitted changes first.", suggest: stash-save}
   - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
-  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Splitting rewrites history; you will need to force-push."}
 questions:
   - {id: commit, ask: "Which commit to split?", type: commit, source: HEAD}
-  - {id: first, ask: "Files for the FIRST commit", type: files, source: changed, multi: true, help: "The rest go into the second commit."}
+  - {id: first, ask: "Files for the FIRST commit", type: files, source: changed, multi: true, partial: true, help: "The rest go into the second commit."}
   - {id: msg1, ask: "Message for the first commit", type: text}
   - {id: msg2, ask: "Message for the second commit", type: text}
 steps:
+  - when: '{{eq .commit_base "--root"}}'
+    fail: "That's the very first commit; there's nothing before it. Pick a later one."
+  - when: '{{eq .commit_pushed "true"}}'
+    warn: "That commit is already on the remote. Splitting it rewrites shared history; you'll need to force-push."
   - when: '{{ne .commit .head}}'
     git: [rebase, -i, --rebase-merges, "{{.commit_base}}"]
     todo:

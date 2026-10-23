@@ -68,11 +68,15 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 Needs git 2.38+ on Linux or WSL (Git Bash and macOS untested for now).
 
+Build from source (Go 1.24+):
+
 ```sh
-go install github.com/dpologdvinity/gitwhy/cmd/gitwhy@latest
+git clone https://github.com/dpologdvinity/gitwhy && cd gitwhy
+go build -o ~/.local/bin/gitwhy ./cmd/gitwhy
 ```
 
-Or build from source: `go build -o gitwhy ./cmd/gitwhy`.
+(`go install ...@latest` doesn't work: `go.mod` replaces a clipboard library with a copy that
+doesn't slow startup on WSL, and `go install` refuses modules with `replace` directives.)
 
 ## How undo works
 
@@ -81,7 +85,12 @@ Snapshots live in `.git/gitwhy/` (last 20). The working-tree copy is a normal gi
 command is about to delete (gitwhy asks git's dry run which ones). Anything already sent to a remote
 (`push`) can't be undone locally.
 
-`git push --mirror` would also push `refs/gitwhy/*`; gitwhy warns when it runs one.
+`git push --mirror` would also push `refs/gitwhy/*`; gitwhy warns when it runs one. After removing a
+leaked secret from history, the old commits stay in your local undo points until they're pruned
+(delete `.git/gitwhy` and `git update-ref -d` the `refs/gitwhy/*` refs to drop them sooner).
+
+Undo leaves alone any branch that changed after the action (for example a commit you made later in
+plain git, or work in another worktree), and tells you which.
 
 ## Development
 

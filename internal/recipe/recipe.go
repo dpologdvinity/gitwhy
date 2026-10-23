@@ -49,6 +49,7 @@ type Question struct {
 	// For branch/commit/files/todo pickers.
 	Source  string   `yaml:"source"` // branch: local, remote, all; files: changed, staged, unstaged, conflicted, untracked; commit/todo: revision range (template)
 	Multi   bool     `yaml:"multi"`
+	Partial bool     `yaml:"partial"` // files: must leave at least one file unpicked
 	Actions []string `yaml:"actions"` // todo: allowed actions besides reorder (drop, squash, fixup, reword)
 }
 
@@ -67,6 +68,8 @@ type Step struct {
 	Env  []string `yaml:"env"`  // extra environment, e.g. GIT_SEQUENCE_EDITOR=true
 	Todo []Edit   `yaml:"todo"` // for "rebase -i": edits gitwhy applies to the todo list
 	Note string   `yaml:"note"` // shown before this step runs
+	Fail string   `yaml:"fail"` // with when: stop before anything runs, showing this
+	Warn string   `yaml:"warn"` // with when: add this warning to the preview
 }
 
 // Edit changes one line of a rebase todo list, or replaces it with a plan.
@@ -207,8 +210,8 @@ func (r *Recipe) validate() error {
 		if s.Ask != "" && !ids[s.Ask] {
 			return fmt.Errorf("step asks unknown question %q", s.Ask)
 		}
-		if s.Ask == "" && len(s.Git) == 0 {
-			return fmt.Errorf("step needs git or ask")
+		if s.Ask == "" && len(s.Git) == 0 && s.Fail == "" && s.Warn == "" {
+			return fmt.Errorf("step needs git, ask, fail or warn")
 		}
 		for _, e := range s.Todo {
 			switch e.Action {

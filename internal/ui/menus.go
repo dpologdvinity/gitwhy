@@ -231,6 +231,10 @@ func (a *App) Run(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: gitwhy run <git command>")
 	}
+	if strings.HasPrefix(args[0], "-") {
+		// -C, -c, --git-dir, --work-tree would point the command (but not the undo point) elsewhere.
+		return fmt.Errorf("gitwhy run doesn't take git's global options (%s); cd into the repo and run the command without them", args[0])
+	}
 	if a.Repo == nil || readOnly[args[0]] {
 		// Nothing to undo: just explain and run.
 		a.showCommand(args)
@@ -242,7 +246,9 @@ func (a *App) Run(args []string) error {
 			wd, _ := os.Getwd()
 			return gitIn(wd, args)
 		}
-		return r.Interactive(args...)
+		r2 := *r
+		r2.Runner.Dir = a.Cwd
+		return r2.Interactive(args...)
 	}
 	return a.execute(job{title: "git " + shellJoin(args), literal: args})
 }
@@ -308,8 +314,12 @@ func (a *App) Undo(pick bool) error {
 	if err != nil || !ok {
 		return err
 	}
-	if _, err := snapshot.Restore(a.Repo, s); err != nil {
+	res, err := snapshot.Restore(a.Repo, s)
+	if err != nil {
 		return fmt.Errorf("undo failed: %w", err)
+	}
+	for _, note := range res.Skipped {
+		warn(note)
 	}
 	snapshot.Delete(a.Repo, s)
 	say("%s Changed your mind? %s again redoes it.", okStyle.Render("✓ Undone."), cmdStyle.Render("gitwhy undo"))

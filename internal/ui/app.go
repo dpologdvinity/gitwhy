@@ -26,6 +26,7 @@ type App struct {
 	Repo    *git.Repo // nil outside a repository
 	Self    string    // path of the gitwhy binary, for the rebase sequence editor
 	Quiet   bool      // hide the teaching breakdown
+	Cwd     string    // where gitwhy was started; literal commands run here
 }
 
 // New loads the knowledge base and recipes from content and opens the repo around the cwd.
@@ -40,6 +41,7 @@ func New(content fs.FS) (*App, error) {
 	}
 	a := &App{KB: k, Recipes: rs, Index: search.New(k, rs)}
 	if wd, err := os.Getwd(); err == nil {
+		a.Cwd = wd
 		a.Repo, _ = git.Open(wd)
 	}
 	a.Self, _ = os.Executable()

@@ -3,7 +3,10 @@ package snapshot
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/dpologdvinity/gitwhy/internal/git"
 
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
@@ -65,11 +68,11 @@ func TestUndoTheUndo(t *testing.T) {
 	}
 	r.Git("reset", "-q", "--hard", "HEAD~1")
 	wrecked := r.State()
-	cur, err := Restore(r.Repo, s)
+	res, err := Restore(r.Repo, s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Restore(r.Repo, cur); err != nil {
+	if _, err := Restore(r.Repo, res.Before); err != nil {
 		t.Fatal(err)
 	}
 	if got := r.State(); got != wrecked {
@@ -137,5 +140,169 @@ func TestEmptyRepoAndPrune(t *testing.T) {
 	}
 	if r.Read("x.txt") != "x\n" {
 		t.Fatal("x.txt not restored in repo without commits")
+	}
+}
+
+func TestNestedRepoAndSubmoduleUntouched(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "a\n")
+	nested := testrepo.New(t)
+	nested.Commit("n1", "n.txt", "n\n")
+	// An untracked nested repo inside the working tree.
+	dst := filepath.Join(r.Top, "nested")
+	if out, err := r.Output("clone", "-q", nested.Top, dst); err != nil {
+		t.Fatal(out, err)
+	}
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := func(args ...string) {
+		c := r.Runner
+		c.Dir = dst
+		if out, err := c.Output(args...); err != nil {
+			t.Fatal(out, err)
+		}
+	}
+	os.WriteFile(filepath.Join(dst, "n.txt"), []byte("edited\n"), 0o644)
+	g("-c", "user.name=T", "-c", "user.email=t@t", "commit", "-qam", "n2")
+	os.WriteFile(filepath.Join(dst, "n.txt"), []byte("uncommitted\n"), 0o644)
+	if _, err := Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dst, "n.txt"))
+	if string(data) != "uncommitted\n" {
+		t.Fatalf("nested repo file = %q", data)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".git")); err != nil {
+		t.Fatal("nested .git deleted")
+	}
+}
+
+func TestSymrefOriginHead(t *testing.T) {
+	up := testrepo.New(t)
+	up.Commit("one", "a.txt", "1\n")
+	clone := t.TempDir()
+	if out, err := up.Output("clone", "-q", up.Top, clone); err != nil {
+		t.Fatal(out, err)
+	}
+	c, _ := git.Open(clone)
+	s, err := Take(c, "fetch", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up.Commit("two", "a.txt", "2\n")
+	if out, err := c.Output("fetch", "-q"); err != nil {
+		t.Fatal(out, err)
+	}
+	if _, err := Restore(c, s); err != nil {
+		t.Fatal(err)
+	}
+	head, _ := c.Output("symbolic-ref", "refs/remotes/origin/HEAD")
+	if head != "refs/remotes/origin/main" {
+		t.Fatalf("origin/HEAD = %q", head)
+	}
+}
+
+func TestRestoreOldestDoesntPruneItself(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	for i := 0; i < Keep; i++ {
+		r.Write("a.txt", strings.Repeat("x", i+1))
+		if _, err := Take(r.Repo, "t", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all, _ := List(r.Repo)
+	oldest := all[len(all)-1]
+	if _, err := Restore(r.Repo, oldest); err != nil {
+		t.Fatal(err)
+	}
+	if r.Read("a.txt") != "x" {
+		t.Fatalf("a.txt = %q", r.Read("a.txt"))
+	}
+}
+
+func TestIgnoredFileOverwriteIsSaved(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Write("notes.txt", "v1\n")
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Write(".git/info/exclude", "notes.txt\n") // now ignored
+	r.Write("notes.txt", "v2 precious\n")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Read("notes.txt") != "v1\n" {
+		t.Fatalf("notes = %q", r.Read("notes.txt"))
+	}
+	if _, err := Restore(r.Repo, res.Before); err != nil {
+		t.Fatal(err)
+	}
+	if r.Read("notes.txt") != "v2 precious\n" {
+		t.Fatalf("undo of undo lost the ignored edit: %q", r.Read("notes.txt"))
+	}
+}
+
+func TestRefsChangedLaterAreLeftAlone(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Git("branch", "feat")
+	s, err := Take(r.Repo, "commit", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Commit("by gitwhy", "a.txt", "2\n")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	// Later, in plain git: a commit on feat and a new branch.
+	feat := r.Git("rev-parse", "feat")
+	r.Git("switch", "-q", "feat")
+	r.Commit("later", "b.txt", "b\n")
+	later := r.Git("rev-parse", "HEAD")
+	r.Git("branch", "newbr")
+	r.Git("switch", "-q", "main")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("log", "-1", "--format=%s", "main"); got != "one" {
+		t.Errorf("main = %q, want one", got)
+	}
+	if got := r.Git("rev-parse", "feat"); got != later || got == feat {
+		t.Errorf("feat was moved back")
+	}
+	if !r.OK("rev-parse", "--verify", "-q", "refs/heads/newbr") {
+		t.Errorf("newbr deleted")
+	}
+	if len(res.Skipped) != 2 {
+		t.Errorf("skipped = %q", res.Skipped)
+	}
+}
+
+func TestSparseCheckoutUndo(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "d1/x", "x\n", "d2/y", "y\n")
+	s, err := Take(r.Repo, "sparse", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("sparse-checkout", "set", "--cone", "d1")
+	if r.Read("d2/y") != "<missing>" {
+		t.Fatal("sparse checkout didn't hide d2")
+	}
+	if _, err := Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if r.Read("d2/y") != "y\n" {
+		t.Fatalf("d2/y = %q", r.Read("d2/y"))
+	}
+	if st := r.Git("status", "--porcelain"); st != "" {
+		t.Fatalf("status = %q", st)
 	}
 }

@@ -51,3 +51,12 @@ func TestMismatchFails(t *testing.T) {
 		t.Fatal("expected error for incomplete plan")
 	}
 }
+
+func TestFullRefusesUpdateRef(t *testing.T) {
+	plan, _ := Write(Plan{Full: []Item{{"pick", "1111111x", ""}}})
+	todo := filepath.Join(t.TempDir(), "todo")
+	os.WriteFile(todo, []byte("pick 1111111 one\nupdate-ref refs/heads/stack1\n"), 0o644)
+	if err := Apply(plan, todo); err == nil {
+		t.Fatal("expected refusal")
+	}
+}
