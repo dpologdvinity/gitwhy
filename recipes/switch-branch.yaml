@@ -1,0 +1,8 @@
+title: Switch to another branch
+aliases: [checkout branch, change branch, go to branch, switch]
+category: branches
+questions:
+  - {id: target, ask: "Which branch?", type: branch, source: all}
+steps:
+  - git: [switch, "{{.target}}"]
+predict: Your files change to {{.target}}. Uncommitted changes come along; git stops if they'd be overwritten. A remote branch gets a local copy that tracks it.

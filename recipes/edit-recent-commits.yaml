@@ -1,0 +1,19 @@
+title: Reorder, squash, rename or drop recent commits
+aliases: [reorder commits, squash commits, combine commits, interactive rebase, rebase -i, fixup, clean up commits, move commit up, move commit down]
+category: rewrite history
+checks:
+  - {if: no-commits, block: "There are no commits yet."}
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Editing them rewrites history; you will need to force-push."}
+questions:
+  - id: plan
+    ask: Arrange your commits
+    type: todo
+    source: HEAD
+    actions: [drop, squash, fixup, reword]
+    help: "squash = merge into the commit above and combine messages; fixup = merge into the commit above, keep its message."
+steps:
+  - git: [rebase, -i, --autostash, "{{.plan_base}}"]
+    todo:
+      - {action: plan, plan: "{{.plan}}"}
+predict: The selected commits are rewritten in the new order. All of them get new IDs.

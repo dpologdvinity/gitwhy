@@ -1,0 +1,13 @@
+title: Store big files with Git LFS
+aliases: [lfs, large files, git lfs track, big files, binary files, lfs setup]
+category: LFS
+checks:
+  - {if: lfs-missing, block: "Git LFS isn't installed. Install it first: https://git-lfs.com"}
+questions:
+  - {id: pattern, ask: "Which files? (pattern like *.psd or assets/**)", type: text}
+steps:
+  - git: [lfs, install]
+    note: Sets up Git LFS for your user (safe to repeat).
+  - git: [lfs, track, "{{.pattern}}"]
+  - git: [add, .gitattributes]
+predict: New and changed files matching {{.pattern}} will be stored in LFS from now on. Files already committed stay as they are (use "Move existing big files into LFS").

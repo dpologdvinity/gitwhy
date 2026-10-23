@@ -1,0 +1,12 @@
+title: Add changes to the last commit
+aliases: [amend, add to last commit, forgot a file, amend commit]
+category: commits
+checks:
+  - {if: no-commits, block: "There are no commits yet."}
+  - {if: head-is-pushed, warn: "The last commit is already on the remote. Amending rewrites it; you will need to force-push."}
+questions:
+  - {id: files, ask: "Which changed files to add?", type: files, source: changed, multi: true}
+steps:
+  - git: [add, -A, --, "{{.files}}"]
+  - git: [commit, --amend, --no-edit]
+predict: The chosen changes join the last commit, keeping its message. It gets a new ID.

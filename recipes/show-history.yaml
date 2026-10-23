@@ -1,0 +1,8 @@
+title: See recent commits
+aliases: [log, history, what changed, recent commits, git log, commit graph]
+category: inspect history
+questions:
+  - {id: which, ask: "Which branch?", type: branch, source: all, default: "{{.branch}}"}
+steps:
+  - git: [log, --oneline, --graph, --decorate, -n, "40", "{{.which}}"]
+predict: Shows the last 40 commits. Nothing changes.

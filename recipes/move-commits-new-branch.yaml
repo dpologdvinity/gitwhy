@@ -1,0 +1,15 @@
+title: Move my last commits to a new branch
+aliases: [committed to wrong branch, move commits to new branch, oops committed on master, take commits off master]
+category: branches
+checks:
+  - {if: detached-head, block: "You're not on a branch."}
+questions:
+  - {id: commit, ask: "Oldest commit to move", type: commit, source: HEAD, help: "This commit and every commit after it move."}
+  - {id: name, ask: "Name of the new branch", type: text}
+  - {id: switch, ask: "Switch to the new branch afterwards?", type: confirm, default: "true"}
+steps:
+  - git: [branch, "{{.name}}"]
+  - git: [reset, --keep, "{{.commit_base}}"]
+  - when: '{{eq .switch "true"}}'
+    git: [switch, "{{.name}}"]
+predict: New branch {{.name}} gets the commits from {{.commit}} onward. {{.branch}} goes back to before them. Uncommitted changes are kept.

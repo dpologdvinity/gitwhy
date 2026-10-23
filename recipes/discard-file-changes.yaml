@@ -1,0 +1,8 @@
+title: Throw away changes to files
+aliases: [discard changes, revert file, undo file changes, checkout file, restore file, reset file]
+category: files
+questions:
+  - {id: files, ask: "Which files?", type: files, source: unstaged, multi: true}
+steps:
+  - git: [restore, --, "{{.files}}"]
+predict: The chosen files go back to their staged (or last committed) version. Unstaged edits to them are deleted (gitwhy undo can restore them).

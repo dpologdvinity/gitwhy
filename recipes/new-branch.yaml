@@ -1,0 +1,9 @@
+title: Create a new branch
+aliases: [new branch, create branch, start branch, checkout -b, switch -c]
+category: branches
+questions:
+  - {id: name, ask: "Name of the new branch", type: text}
+  - {id: base, ask: "Start it from", type: branch, source: all, default: "{{.branch}}"}
+steps:
+  - git: [switch, -c, "{{.name}}", "{{.base}}"]
+predict: New branch {{.name}} starts at {{.base}} and becomes your current branch. Uncommitted changes come along.

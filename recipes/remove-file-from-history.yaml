@@ -1,0 +1,12 @@
+title: Remove a file from all history (leaked secret, huge file)
+aliases: [remove file from history, delete secret, purge file, filter-repo, filter-branch, bfg, remove password from git]
+category: rewrite history
+explain: If it's a secret, rotate it anyway; anyone who cloned already has it.
+checks:
+  - {if: filter-repo-missing, block: "This needs git-filter-repo. Install it: https://github.com/newren/git-filter-repo/blob/main/INSTALL.md"}
+  - {if: dirty-tree, block: "Commit or stash your changes first.", suggest: stash-save}
+questions:
+  - {id: path, ask: "Path of the file or folder to remove", type: text}
+steps:
+  - git: [filter-repo, --force, --invert-paths, --path, "{{.path}}"]
+predict: "{{.path}} is removed from every commit on every branch. All commit IDs change, filter-repo removes the 'origin' remote, and you must force-push everything. gitwhy undo restores your local refs."

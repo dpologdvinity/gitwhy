@@ -1,0 +1,15 @@
+title: Delete untracked files
+aliases: [clean, git clean, remove untracked files, delete new files]
+category: files
+checks:
+  - {if: "!untracked-files", block: "There are no untracked files."}
+questions:
+  - id: what
+    ask: Delete what?
+    type: choice
+    options:
+      - {label: "Untracked files and folders (keep ignored ones)", value: "-fd", danger: "Untracked files are deleted from disk."}
+      - {label: "Also ignored files (build output, node_modules, .env)", value: "-fdx", danger: "Untracked AND ignored files are deleted, including secrets like .env."}
+steps:
+  - git: [clean, "{{.what}}"]
+predict: Files git doesn't track are deleted from disk. gitwhy saves untracked (and listed ignored) files first so undo can bring them back.

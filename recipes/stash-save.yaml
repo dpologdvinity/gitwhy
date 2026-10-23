@@ -1,0 +1,14 @@
+title: Set my changes aside (stash)
+aliases: [stash, save changes for later, shelve, put away changes, git stash]
+category: stash
+checks:
+  - {if: "!dirty-tree", warn: "You have no changes to tracked files (only untracked files would be stashed, if you include them)."}
+questions:
+  - {id: message, ask: "A note to recognize this stash later", type: text, optional: true}
+  - {id: untracked, ask: "Include untracked files?", type: confirm, default: "true"}
+steps:
+  - when: '{{eq .untracked "true"}}'
+    git: [stash, push, --include-untracked, "{{if .message}}--message={{.message}}{{end}}"]
+  - when: '{{ne .untracked "true"}}'
+    git: [stash, push, "{{if .message}}--message={{.message}}{{end}}"]
+predict: Your uncommitted changes are saved in a stash and your files go back to the last commit.

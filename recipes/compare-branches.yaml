@@ -1,0 +1,12 @@
+title: Compare two branches
+aliases: [compare branches, diff branches, what's different, branch difference, ahead behind]
+category: inspect history
+questions:
+  - {id: a, ask: "First branch", type: branch, source: all, default: "{{.branch}}"}
+  - {id: b, ask: "Second branch", type: branch, source: all, default: origin/master}
+steps:
+  - git: [log, --oneline, --left-right, --cherry-mark, "{{.a}}...{{.b}}"]
+    note: "< = only on the first branch, > = only on the second, = = same change on both"
+  - git: [diff, --stat, "{{.b}}...{{.a}}"]
+    note: Files the first branch changed since the branches split.
+predict: Shows commits and files that differ. Nothing changes.

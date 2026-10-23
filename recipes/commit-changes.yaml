@@ -1,0 +1,10 @@
+title: Commit my changes
+aliases: [commit, save changes, git commit]
+category: commits
+questions:
+  - {id: files, ask: "Which files to commit?", type: files, source: changed, multi: true}
+  - {id: message, ask: "Commit message", type: text}
+steps:
+  - git: [add, -A, --, "{{.files}}"]
+  - git: [commit, -m, "{{.message}}"]
+predict: A new commit "{{.message}}" is added to {{.branch}} with the chosen files.

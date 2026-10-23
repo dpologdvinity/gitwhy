@@ -1,0 +1,9 @@
+title: Rename a branch
+aliases: [rename branch, change branch name, branch -m]
+category: branches
+questions:
+  - {id: old, ask: "Which branch?", type: branch, source: local, default: "{{.branch}}"}
+  - {id: name, ask: "New name", type: text}
+steps:
+  - git: [branch, -m, "{{.old}}", "{{.name}}"]
+predict: "{{.old}} is renamed to {{.name}} locally. The remote keeps the old name until you push the new one and delete the old one."

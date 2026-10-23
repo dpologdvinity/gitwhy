@@ -1,0 +1,9 @@
+title: List files stored in Git LFS
+aliases: [lfs ls-files, which files are in lfs, lfs status]
+category: LFS
+checks:
+  - {if: lfs-missing, block: "Git LFS isn't installed. Install it first: https://git-lfs.com"}
+questions: []
+steps:
+  - git: [lfs, ls-files]
+predict: Lists LFS files in the current commit. Nothing changes.

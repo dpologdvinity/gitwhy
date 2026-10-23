@@ -1,0 +1,9 @@
+title: Work on another branch in a separate folder (worktree)
+aliases: [worktree, second checkout, work on two branches at once, worktree add]
+category: monorepo
+questions:
+  - {id: target, ask: "Which branch?", type: branch, source: all}
+  - {id: dir, ask: "Folder for it (e.g. ../hotfix)", type: text}
+steps:
+  - git: [worktree, add, "{{.dir}}", "{{.target}}"]
+predict: Folder {{.dir}} gets a checkout of {{.target}}, sharing this repo's history. Your current folder doesn't change.

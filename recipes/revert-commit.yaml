@@ -1,0 +1,9 @@
+title: Undo a commit with a new commit (safe for pushed commits)
+aliases: [revert, undo pushed commit, reverse commit, cancel commit]
+category: undo
+explain: Makes a new commit that reverses the old one. History is not rewritten, so it is safe on shared branches.
+questions:
+  - {id: commit, ask: "Which commit to reverse?", type: commit, source: HEAD}
+steps:
+  - git: [revert, --no-edit, "{{.commit}}"]
+predict: A new commit on {{.branch}} reverses the changes of {{.commit}}. History stays as it is.

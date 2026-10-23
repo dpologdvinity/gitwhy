@@ -1,0 +1,25 @@
+title: Delete a branch
+aliases: [delete branch, remove branch, branch -d, delete remote branch, clean up branches]
+category: branches
+questions:
+  - {id: target, ask: "Which branch?", type: branch, source: local}
+  - id: where
+    ask: Delete it where?
+    type: choice
+    options:
+      - {label: "Only on my computer", value: "local"}
+      - {label: "On my computer and on the remote", value: "both", danger: "The remote branch is deleted for everyone."}
+      - {label: "Only on the remote", value: "remote", danger: "The remote branch is deleted for everyone."}
+  - id: force
+    ask: Delete even if it has commits not merged anywhere?
+    type: confirm
+    default: "false"
+    when: '{{ne .where "remote"}}'
+steps:
+  - when: '{{and (ne .where "remote") (ne .force "true")}}'
+    git: [branch, -d, "{{.target}}"]
+  - when: '{{and (ne .where "remote") (eq .force "true")}}'
+    git: [branch, -D, "{{.target}}"]
+  - when: '{{ne .where "local"}}'
+    git: [push, "{{.remote}}", --delete, "{{.target}}"]
+predict: "Branch {{.target}} is deleted{{if eq .where \"local\"}} locally{{else if eq .where \"remote\"}} on {{.remote}}{{else}} locally and on {{.remote}}{{end}}. Its commits stay recoverable for a while via gitwhy recover."

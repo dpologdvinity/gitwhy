@@ -1,0 +1,9 @@
+title: Find who changed a line and why
+aliases: [blame, who wrote this, why does this line exist, git blame, annotate]
+category: inspect history
+questions:
+  - {id: file, ask: "Which file?", type: files, source: tracked}
+  - {id: lines, ask: "Line range (e.g. 10,20)", type: text}
+steps:
+  - git: [blame, -w, -C, -L, "{{.lines}}", --, "{{.file}}"]
+predict: Shows the commit and author for each line. Nothing changes.

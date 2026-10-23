@@ -1,0 +1,21 @@
+title: Update my branch with the latest master
+aliases: [rebase, rebase on master, update branch, catch up with master, rebase onto main, pull master into branch]
+category: sync with remote
+checks:
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+  - {if: detached-head, block: "You're not on a branch."}
+questions:
+  - {id: base, ask: "Update from which branch?", type: branch, source: remote, default: origin/master}
+  - id: how
+    ask: How?
+    type: choice
+    options:
+      - {label: "Rebase: replay my commits on top (clean history)", value: "rebase"}
+      - {label: "Merge: add a merge commit (no rewrite)", value: "merge"}
+steps:
+  - git: [fetch, --prune]
+  - when: '{{eq .how "rebase"}}'
+    git: [rebase, --autostash, "{{.base}}"]
+  - when: '{{eq .how "merge"}}'
+    git: [merge, --no-edit, "{{.base}}"]
+predict: "{{if eq .how \"rebase\"}}Your commits on {{.branch}} are replayed on top of {{.base}} and get new IDs; force-push needed if already pushed.{{else}}{{.base}} is merged into {{.branch}} with a merge commit.{{end}}"

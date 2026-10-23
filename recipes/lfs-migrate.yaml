@@ -1,0 +1,17 @@
+title: Move existing big files into Git LFS (rewrites history)
+aliases: [lfs migrate, convert to lfs, move files to lfs, lfs import]
+category: LFS
+checks:
+  - {if: lfs-missing, block: "Git LFS isn't installed. Install it first: https://git-lfs.com"}
+  - {if: dirty-tree, block: "Commit or stash your changes first.", suggest: stash-save}
+questions:
+  - {id: pattern, ask: "Which files? (pattern like *.zip)", type: text}
+  - id: scope
+    ask: Rewrite which history?
+    type: choice
+    options:
+      - {label: "Only my current branch", value: ""}
+      - {label: "All branches and tags", value: "--everything", danger: "Every branch and tag is rewritten; everyone must re-clone or reset."}
+steps:
+  - git: [lfs, migrate, import, "--include={{.pattern}}", "{{.scope}}"]
+predict: Commits containing {{.pattern}} are rewritten to store those files in LFS. Commit IDs change; you will need to force-push.

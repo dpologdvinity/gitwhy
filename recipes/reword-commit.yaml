@@ -1,0 +1,18 @@
+title: Change a commit message
+aliases: [rename commit, reword, edit commit message, fix commit message, rename past commit]
+category: rewrite history
+checks:
+  - {if: no-commits, block: "There are no commits yet."}
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Changing a message rewrites history; you will need to force-push."}
+questions:
+  - {id: commit, ask: "Which commit?", type: commit, source: HEAD}
+  - {id: message, ask: "New message", type: text}
+steps:
+  - when: '{{eq .commit .head}}'
+    git: [commit, --amend, --only, -m, "{{.message}}"]
+  - when: '{{ne .commit .head}}'
+    git: [rebase, -i, --autostash, --rebase-merges, "{{.commit_base}}"]
+    todo:
+      - {action: reword, commit: "{{.commit}}", message: "{{.message}}"}
+predict: The message of {{.commit}} becomes "{{.message}}". It and every later commit get new IDs.

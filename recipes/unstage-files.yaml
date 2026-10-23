@@ -1,0 +1,8 @@
+title: Unstage files
+aliases: [unstage, remove from staging, undo git add, reset file]
+category: files
+questions:
+  - {id: files, ask: "Which files?", type: files, source: staged, multi: true}
+steps:
+  - git: [restore, --staged, --, "{{.files}}"]
+predict: The chosen files are no longer staged. Your edits stay in the files.

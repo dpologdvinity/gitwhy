@@ -1,0 +1,12 @@
+title: Cancel the merge / rebase / cherry-pick in progress
+aliases: [abort, cancel merge, cancel rebase, stop rebase, get out of merge, abort rebase, abort merge]
+category: merge & conflicts
+checks:
+  - {if: "!in-progress-op", block: "Nothing is in progress."}
+questions: []
+steps:
+  - when: '{{ne .op "bisect"}}'
+    git: ["{{.op}}", --abort]
+  - when: '{{eq .op "bisect"}}'
+    git: [bisect, reset]
+predict: The {{.op}} stops and everything goes back to how it was before it started. Conflict fixes you made are discarded.

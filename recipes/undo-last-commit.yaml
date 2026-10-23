@@ -1,0 +1,20 @@
+title: Undo last commit
+aliases: [uncommit, take back commit, remove last commit, undo commit keep changes, undo commit delete changes, reset last commit]
+category: undo
+checks:
+  - {if: no-commits, block: "There are no commits yet."}
+  - {if: no-parent, block: "This is the first commit; there is nothing before it to go back to."}
+  - {if: head-is-pushed, warn: "This commit is already on the remote. Undoing it rewrites shared history; others may need to fix their copies.", suggest: revert-commit}
+questions:
+  - id: keep
+    ask: Keep the changes from that commit?
+    type: choice
+    options:
+      - {label: "Yes, staged (ready to commit again)", value: "--soft"}
+      - {label: "Yes, unstaged (in your files only)", value: "--mixed"}
+      - {label: "No, delete them", value: "--hard", danger: "The commit's changes AND all your uncommitted changes are deleted."}
+steps:
+  - git: [reset, "{{.keep}}", "HEAD~1"]
+predict: >-
+  The last commit is removed from {{.branch}}.
+  {{if eq .keep "--soft"}}Its changes stay staged.{{else if eq .keep "--mixed"}}Its changes stay in your files, unstaged.{{else}}Its changes and every uncommitted change are deleted.{{end}}

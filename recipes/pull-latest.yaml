@@ -1,0 +1,20 @@
+title: Get the latest changes for my branch
+aliases: [pull, download changes, update, sync, git pull]
+category: sync with remote
+checks:
+  - {if: no-upstream, block: "This branch doesn't track a remote branch yet. Push it first.", suggest: push-branch}
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+questions:
+  - id: how
+    ask: If both you and the remote have new commits?
+    type: choice
+    options:
+      - {label: "Stop and tell me (safest)", value: "--ff-only"}
+      - {label: "Rebase my commits on top", value: "--rebase"}
+      - {label: "Merge with a merge commit", value: "--no-rebase"}
+steps:
+  - git: [pull, "{{.how}}", --autostash]
+    when: '{{ne .how "--ff-only"}}'
+  - git: [pull, --ff-only]
+    when: '{{eq .how "--ff-only"}}'
+predict: "{{.branch}} gets the new commits from {{.upstream}}. {{if eq .how \"--ff-only\"}}If your branch has commits the remote doesn't, nothing changes and git tells you.{{end}}"

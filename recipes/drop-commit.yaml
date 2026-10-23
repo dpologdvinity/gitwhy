@@ -1,0 +1,13 @@
+title: Remove a commit from history
+aliases: [delete commit, drop commit, remove past commit, erase commit, rewrite history remove commit]
+category: rewrite history
+checks:
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. Removing one rewrites history; you will need to force-push.", suggest: revert-commit}
+questions:
+  - {id: commit, ask: "Which commit to remove?", type: commit, source: HEAD}
+steps:
+  - git: [rebase, -i, --autostash, --rebase-merges, "{{.commit_base}}"]
+    todo:
+      - {action: drop, commit: "{{.commit}}"}
+predict: "{{.commit}} and its changes disappear from {{.branch}}. Later commits get new IDs. Later commits that depend on it may conflict."

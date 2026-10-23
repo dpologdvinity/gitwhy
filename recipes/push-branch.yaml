@@ -1,0 +1,21 @@
+title: Push my branch
+aliases: [push, upload, publish branch, push new branch, set upstream, force push]
+category: sync with remote
+checks:
+  - {if: detached-head, block: "You're not on a branch."}
+questions:
+  - id: how
+    ask: How?
+    type: choice
+    options:
+      - {label: "Normal push", value: "normal"}
+      - {label: "Force, but only if nobody else pushed (after rewriting history)", value: "lease", danger: "Replaces the remote branch with yours."}
+      - {label: "Force, no matter what", value: "force", danger: "Replaces the remote branch with yours, deleting anyone else's new commits on it."}
+steps:
+  - when: '{{eq .how "normal"}}'
+    git: [push, -u, "{{.remote}}", "{{.branch}}"]
+  - when: '{{eq .how "lease"}}'
+    git: [push, -u, --force-with-lease, --force-if-includes, "{{.remote}}", "{{.branch}}"]
+  - when: '{{eq .how "force"}}'
+    git: [push, -u, --force, "{{.remote}}", "{{.branch}}"]
+predict: "{{.branch}} is uploaded to {{.remote}} and set to track it. A push can't be undone with gitwhy undo."

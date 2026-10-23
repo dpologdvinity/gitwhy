@@ -1,0 +1,11 @@
+title: Continue after fixing conflicts
+aliases: [continue, rebase --continue, merge --continue, cherry-pick --continue, keep going]
+category: merge & conflicts
+checks:
+  - {if: "!in-progress-op", block: "Nothing is in progress."}
+  - {if: has-conflicts, block: "Some files still have conflicts.", suggest: resolve-conflicts}
+questions: []
+steps:
+  - git: ["{{.op}}", --continue]
+    env: [GIT_EDITOR=true]
+predict: The {{.op}} continues with your resolved files.

@@ -1,0 +1,19 @@
+title: Make a branch exactly match the remote (like master = origin/master)
+aliases: [make branch same as remote, make master same as remote, reset to origin, discard local commits, match remote branch, force sync]
+category: sync with remote
+questions:
+  - {id: target, ask: "Which local branch?", type: branch, source: local, default: "{{.branch}}"}
+  - id: mode
+    ask: Uncommitted changes (only if it's the current branch)?
+    type: choice
+    when: '{{eq .target .branch}}'
+    options:
+      - {label: "Keep them (stop if they'd be overwritten)", value: "--keep"}
+      - {label: "Delete them", value: "--hard", danger: "All uncommitted changes to tracked files are deleted."}
+steps:
+  - git: [fetch, --prune]
+  - when: '{{eq .target .branch}}'
+    git: [reset, "{{.mode}}", "{{.target}}@{upstream}"]
+  - when: '{{ne .target .branch}}'
+    git: [branch, -f, "{{.target}}", "{{.target}}@{upstream}"]
+predict: "{{.target}} will exactly match its remote branch. Local commits not on the remote leave it (recoverable with gitwhy undo)."

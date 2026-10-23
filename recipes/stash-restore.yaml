@@ -1,0 +1,14 @@
+title: Bring back stashed changes
+aliases: [stash pop, unstash, stash apply, restore stash, get stash back]
+category: stash
+questions:
+  - id: keep
+    ask: Keep the stash after applying?
+    type: choice
+    options:
+      - {label: "No, remove it (pop)", value: "pop"}
+      - {label: "Yes, keep a copy (apply)", value: "apply"}
+  - {id: which, ask: "Which stash? (0 = newest)", type: text, default: "0"}
+steps:
+  - git: [stash, "{{.keep}}", "stash@{{`{`}}{{.which}}{{`}`}}"]
+predict: The stashed changes are applied to your files. If they conflict, git stops and keeps the stash.

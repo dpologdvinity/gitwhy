@@ -1,0 +1,19 @@
+title: Make my branch the same as another branch (like master)
+aliases: [make branch same as master, reset branch to master, match master, start over from master, reset to branch]
+category: branches
+checks:
+  - {if: detached-head, block: "You're not on a branch."}
+questions:
+  - {id: target, ask: "Make it the same as which branch?", type: branch, source: all, default: origin/master}
+  - id: mode
+    ask: Your uncommitted changes?
+    type: choice
+    options:
+      - {label: "Keep them (stop if they'd be overwritten)", value: "--keep"}
+      - {label: "Delete them", value: "--hard", danger: "All uncommitted changes to tracked files are deleted."}
+  - {id: fetch, ask: "Fetch the latest from the remote first?", type: confirm, default: "true"}
+steps:
+  - when: '{{eq .fetch "true"}}'
+    git: [fetch, --all, --prune]
+  - git: [reset, "{{.mode}}", "{{.target}}"]
+predict: "{{.branch}} will point at the same commit as {{.target}}. Commits only on {{.branch}} leave it (recoverable with gitwhy undo or recover)."

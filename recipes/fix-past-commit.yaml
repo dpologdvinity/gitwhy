@@ -1,0 +1,15 @@
+title: Add changes to an older commit
+aliases: [rewrite past commit, edit old commit, amend older commit, fixup, change past commit, add file to old commit]
+category: rewrite history
+checks:
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+  - {if: head-is-pushed, warn: "Commits on this branch are already on the remote. This rewrites history; you will need to force-push."}
+questions:
+  - {id: files, ask: "Which changed files to add to the old commit?", type: files, source: changed, multi: true}
+  - {id: commit, ask: "Which commit should get them?", type: commit, source: HEAD}
+steps:
+  - git: [add, -A, --, "{{.files}}"]
+  - git: [commit, "--fixup={{.commit}}"]
+  - git: [rebase, -i, --autosquash, --autostash, --rebase-merges, "{{.commit_base}}"]
+    env: [GIT_SEQUENCE_EDITOR=true]
+predict: The chosen file changes become part of {{.commit}}. It and every later commit get new IDs.

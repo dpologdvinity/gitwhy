@@ -1,0 +1,10 @@
+title: Download the real LFS files (I only see small pointer files)
+aliases: [lfs pull, lfs files missing, pointer files, download lfs]
+category: LFS
+checks:
+  - {if: lfs-missing, block: "Git LFS isn't installed. Install it first: https://git-lfs.com"}
+questions: []
+steps:
+  - git: [lfs, install]
+  - git: [lfs, pull]
+predict: LFS files for your current commit are downloaded and replace the pointer files.

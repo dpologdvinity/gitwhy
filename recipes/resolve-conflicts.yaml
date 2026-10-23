@@ -1,0 +1,27 @@
+title: Resolve merge conflicts
+aliases: [conflict, conflicts, merge conflict, fix conflicts, resolve, both modified, unmerged]
+category: merge & conflicts
+explain: >-
+  {{if eq .op "rebase"}}During a rebase, "ours" is the branch you're rebasing ONTO (e.g. master) and "theirs" is YOUR commit being replayed.
+  {{else}}"Ours" is your current branch ({{.branch}}); "theirs" is what's coming in.{{end}}
+checks:
+  - {if: "!has-conflicts", block: "There are no conflicted files."}
+questions:
+  - {id: files, ask: "Which conflicted files?", type: files, source: conflicted, multi: true}
+  - id: side
+    ask: Resolve them how?
+    type: choice
+    options:
+      - {label: "Keep ours", value: "ours", danger: "Their side of each conflicting change is discarded in these files."}
+      - {label: "Keep theirs", value: "theirs", danger: "Our side of each conflicting change is discarded in these files."}
+      - {label: "Open my editor / merge tool and fix by hand", value: "tool"}
+      - {label: "I've already fixed them; mark as resolved", value: "done"}
+steps:
+  - when: '{{eq .side "ours"}}'
+    git: [checkout, --ours, --, "{{.files}}"]
+  - when: '{{eq .side "theirs"}}'
+    git: [checkout, --theirs, --, "{{.files}}"]
+  - when: '{{eq .side "tool"}}'
+    git: [mergetool, --, "{{.files}}"]
+  - git: [add, --, "{{.files}}"]
+predict: The chosen files are marked resolved. When no conflicts are left, run "gitwhy continue" (or this recipe again for other files).

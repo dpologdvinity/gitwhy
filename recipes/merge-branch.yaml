@@ -1,0 +1,24 @@
+title: Merge another branch into mine
+aliases: [merge, merge branch, combine branches, bring in changes from branch, merge master into my branch]
+category: merge & conflicts
+checks:
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+questions:
+  - {id: from, ask: "Merge which branch into {{.branch}}?", type: branch, source: all}
+  - id: mode
+    ask: How?
+    type: choice
+    options:
+      - {label: "Normal (fast-forward if possible)", value: ""}
+      - {label: "Always make a merge commit", value: "--no-ff"}
+      - {label: "Squash: one commit with all its changes", value: "--squash"}
+      - {label: "Only if it's a fast-forward", value: "--ff-only"}
+  - {id: message, ask: "Message for the squash commit", type: text, when: '{{eq .mode "--squash"}}'}
+steps:
+  - git: [merge, "{{.mode}}", --no-edit, "{{.from}}"]
+    when: '{{ne .mode "--squash"}}'
+  - git: [merge, --squash, "{{.from}}"]
+    when: '{{eq .mode "--squash"}}'
+  - git: [commit, -m, "{{.message}}"]
+    when: '{{eq .mode "--squash"}}'
+predict: Changes from {{.from}} are combined into {{.branch}}. If both changed the same lines, git stops for you to resolve conflicts (gitwhy resolve).

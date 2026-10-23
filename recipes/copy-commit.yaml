@@ -1,0 +1,9 @@
+title: Copy a commit from another branch
+aliases: [cherry-pick, copy commit, bring commit over, apply commit from branch]
+category: branches
+questions:
+  - {id: from, ask: "Which branch has the commit?", type: branch, source: all}
+  - {id: commit, ask: "Which commit?", type: commit, source: "HEAD..{{.from}}"}
+steps:
+  - git: [cherry-pick, "{{.commit}}"]
+predict: A copy of {{.commit}} is added on top of {{.branch}}. The original stays on {{.from}}.

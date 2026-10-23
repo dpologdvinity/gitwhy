@@ -1,0 +1,8 @@
+title: Stage files for the next commit
+aliases: [add, git add, stage, add files]
+category: files
+questions:
+  - {id: files, ask: "Which files?", type: files, source: changed, multi: true}
+steps:
+  - git: [add, -A, --, "{{.files}}"]
+predict: The chosen files' current state is staged for the next commit.
