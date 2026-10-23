@@ -1,5 +1,5 @@
 {
-  "name": "gitwhy",
+  "name": "@kaitlynbassford/gitwhy",
   "version": "0.0.0",
   "description": "Do anything with git without looking it up, with previews and undo",
   "license": "MIT",
