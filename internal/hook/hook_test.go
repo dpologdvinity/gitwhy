@@ -138,3 +138,47 @@ func TestPreSavesIgnoredFilesFromSubfolder(t *testing.T) {
 		t.Fatalf("build.log = %q", got)
 	}
 }
+
+func TestPreSkipsBareRepo(t *testing.T) {
+	bare := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if id := Pre(bare, []string{"reset", "--hard"}); id != "" {
+		t.Fatalf("Pre in bare repo = %q", id)
+	}
+}
+
+func TestPreGivesUpQuietlyWhenSnapshotFails(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n")
+	r.Write("f.txt", "dirty\n")
+	if err := os.WriteFile(filepath.Join(r.GitDir, "index.lock"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if id := Pre(r.Top, []string{"reset", "--hard"}); id != "" {
+		t.Fatalf("Pre with index.lock = %q", id)
+	}
+}
+
+func TestHookScriptWorksInZsh(t *testing.T) {
+	zsh, err := exec.LookPath("zsh")
+	if err != nil {
+		t.Skip("no zsh")
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	script, _ := Script("zsh")
+	f := filepath.Join(t.TempDir(), "t.zsh")
+	if err := os.WriteFile(f, []byte(script+"\ngit rev-parse --verify nope; echo rc=$?\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(zsh, f)
+	c.Env = append(os.Environ(), "PATH="+filepath.Dir(gitPath))
+	out, _ := c.CombinedOutput()
+	if !strings.Contains(string(out), "rc=128") {
+		t.Fatalf("output:\n%s", out)
+	}
+}
