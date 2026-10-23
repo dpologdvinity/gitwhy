@@ -62,6 +62,10 @@ func TestParseFlagForms(t *testing.T) {
 	if f.Spellings[0] != "-m" || f.Spellings[1] != "--message" || f.Value != "<msg>" || f.Optional {
 		t.Errorf("value: %+v", f)
 	}
+	f, _ = parseFlag("`-S[<key-id>]`, `--[no-]gpg-sign[=<key-id>]`", "x")
+	if f.Spellings[0] != "-S" || f.Spellings[1] != "--gpg-sign" || f.Value != "<key-id>" || !f.Optional {
+		t.Errorf("short optional: %+v", f)
+	}
 	f, _ = parseFlag("`--color[=<when>]`", "x")
 	if f.Spellings[0] != "--color" || f.Value != "<when>" || !f.Optional {
 		t.Errorf("optional: %+v", f)

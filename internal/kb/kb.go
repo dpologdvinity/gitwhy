@@ -294,7 +294,9 @@ func parseFlag(cell, desc string) (Flag, bool) {
 		display = append(display, spell)
 		// "-a <x>", "--x=<v>", "--x[=<v>]"
 		head, value := spell, ""
-		if i := strings.Index(spell, "[="); i > 0 {
+		if i := strings.Index(spell, "[<"); i > 0 && !strings.Contains(spell[:i], "=") { // "-S[<key-id>]"
+			head, value, f.Optional = spell[:i], strings.Trim(spell[i:], "[]"), true
+		} else if i := strings.Index(spell, "[="); i > 0 {
 			head, value, f.Optional = spell[:i], strings.TrimSuffix(spell[i+2:], "]"), true
 		} else if i := strings.IndexAny(spell, " ="); i > 0 {
 			head, value = spell[:i], spell[i+1:]

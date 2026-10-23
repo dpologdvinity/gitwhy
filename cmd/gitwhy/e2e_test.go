@@ -431,3 +431,13 @@ func TestExplainAndSearch(t *testing.T) {
 	out = drive(t, r.dir, []string{"undo", "last", "commit"}, pick("Undo last commit"), pick("Yes, staged"), yes)
 	expect(t, "searched and ran", r.subjects(), "c3\nc2\nc1", out)
 }
+
+func TestBuilder(t *testing.T) {
+	r := newRepo(t)
+	// git commit, flags: --allow-empty and --message (asks a value), nothing else.
+	out := drive(t, r.dir, []string{"build", "commit"}, pick("allow-empty "), pick("-m <msg>"), text("0"), text("built it"), text(""), yes)
+	expect(t, "subject", r.git("log", "-1", "--format=%s"), "built it", out)
+	if !strings.Contains(out, "git commit --allow-empty '--message=built it'") {
+		t.Fatalf("command not shown:\n%s", out)
+	}
+}

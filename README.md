@@ -1,0 +1,95 @@
+# gitwhy
+
+**Do anything with git without looking it up. See what will happen first. Undo it after.**
+
+For interns, new grads, and anyone who still searches "how to undo last commit".
+No AI, no account, no network: one binary that runs the real `git`.
+
+```
+$ gitwhy undo last commit
+
+Undo last commit
+? Keep the changes from that commit?
+  > Yes, staged (ready to commit again)
+    Yes, unstaged (in your files only)
+    No, delete them  ⚠ The commit's changes AND all your uncommitted changes are deleted.
+
+What will happen
+  main moves from 2260da9 to 8c51201 "one".
+  Commits leaving main (1):
+      2260da9 two
+  Their changes stay staged (1):
+      a.txt
+
+Command
+  git reset --soft HEAD~1
+    reset   Move the current branch to another commit, or unstage files.
+    --soft  Move the branch only; changes stay staged.
+    HEAD~1  1 commit(s) before the commit you're on now
+
+? Run it? Yes
+$ git reset --soft HEAD~1
+
+✓ Done. Undo with: gitwhy undo
+```
+
+## What it does
+
+- **Say what you want.** `gitwhy move my last commit to a new branch` finds the guided recipe and asks only what it needs (which commit? which branch?).
+- **See it before it happens.** gitwhy predicts the result with git's own dry runs: commits that leave a branch, files that change, and **conflicts before they happen** (for merge, rebase, cherry-pick, revert).
+- **Learn as you go.** Every command it runs is shown and broken down part by part.
+- **Undo anything it ran.** Before running, gitwhy saves branches, staged and unstaged changes, untracked files, stashes, and merge/rebase state. `gitwhy undo` puts it all back, even after `reset --hard` or `clean -fdx`.
+- **Recover from plain git too.** `gitwhy recover` reads git's history of your branch ("2h ago: pulled 14 commits from origin/master") and takes you back to before any of it. It also finds lost commits and staged files git still has.
+- **Every git command and flag.** `gitwhy build` walks you through any command with every flag explained in a few words, from [the docs in this repo](docs/README.md) (181 commands, ~3,500 flags, git 2.56).
+
+## Commands
+
+| | |
+|---|---|
+| `gitwhy` | Menu |
+| `gitwhy <words>` | Search, e.g. `gitwhy squash commits` |
+| `gitwhy do [recipe]` | Run a guided recipe by name (no name: list them) |
+| `gitwhy run <git command>` | Preview, explain, run with undo: `gitwhy run git rebase main` |
+| `gitwhy explain <git command>` | Explain each part without running it |
+| `gitwhy build [command]` | Build any git command from its flags |
+| `gitwhy undo [--list]` | Undo the last gitwhy action (or pick one) |
+| `gitwhy recover` | What happened recently, and go back |
+| `gitwhy resolve` / `continue` / `abort` | Fix conflicts, then continue or cancel a merge/rebase |
+
+`-q` / `GITWHY_EXPLAIN=0` hides the breakdown. `ACCESSIBLE=1` uses plain-text prompts (screen readers, scripts).
+
+## Guided recipes
+
+Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safely · change a commit message (any commit) · remove a commit · reorder, squash, fixup, rename or drop recent commits · squash last commits · split a commit in two · add changes to an older commit · move commits to a new or existing branch · copy a commit from another branch · make a branch the same as master · make a branch exactly match the remote · create, switch, rename, delete branches (local and remote) · merge · update my branch from master (rebase or merge) · resolve conflicts, continue, abort · push (normal / safe force / force) · pull · stash and restore · discard, stage, unstage files · delete untracked files · Git LFS: track, migrate, pull, list · remove a file from all history · worktrees · sparse checkout · history, compare branches, blame.
+
+`gitwhy do` lists them all. Each is a small YAML file in [`recipes/`](recipes); add your own.
+
+## Install
+
+Needs git 2.38+ on Linux or WSL (Git Bash and macOS untested for now).
+
+```sh
+go install github.com/dpologdvinity/gitwhy/cmd/gitwhy@latest
+```
+
+Or build from source: `go build -o gitwhy ./cmd/gitwhy`.
+
+## How undo works
+
+Snapshots live in `.git/gitwhy/` (last 20). The working-tree copy is a normal git commit kept alive by
+`refs/gitwhy/snapshots/<id>`, so it costs little space. Ignored files are not saved, except files a
+command is about to delete (gitwhy asks git's dry run which ones). Anything already sent to a remote
+(`push`) can't be undone locally.
+
+`git push --mirror` would also push `refs/gitwhy/*`; gitwhy warns when it runs one.
+
+## Development
+
+```sh
+go test ./...                    # unit + end-to-end tests (real git, temp repos)
+python3 scripts/check_coverage.py   # every flag in your git's -h/man pages is documented
+python3 scripts/build_index.py      # rebuild docs/README.md
+```
+
+Docs are original plain-English descriptions (git's own docs are GPL-2.0; nothing is copied).
+Format: [docs/STYLE.md](docs/STYLE.md). Design: [docs/superpowers/specs](docs/superpowers/specs).
