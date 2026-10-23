@@ -29,7 +29,7 @@ Also takes [commit selection options](../shared/revision-options.md) to limit se
 | `--[no-]abbrev[=<n>]` | `<n>`-digit commit IDs. |
 | `--encoding=<encoding>` | Encoding for author names and summaries. `none` = unconverted. |
 | `--date=<format>` | Date format, as `git log --date` (`relative`, `short`, `iso`). Default `blame.date`, else `iso`. |
-| `--contents <file>` | Use `<file>`'s text as the final version (on top of `<rev>` or `HEAD`). `-` = stdin. For unsaved edits. |
+| `--[no-]contents <file>` | Use `<file>`'s text as the final version (on top of `<rev>` or `HEAD`). `-` = stdin. For unsaved edits. |
 | `--reverse <start>..<end>` | Search forward: last commit where each line still existed. `<start>` alone = `<start>..HEAD`. |
 | `--first-parent` | Follow only first parents: when a line entered the main branch. |
 | `-S <revs-file>` | Use commits in `<revs-file>` instead of walking history. |

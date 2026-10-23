@@ -1,0 +1,17 @@
+title: Find a commit by its message or change
+aliases: [search commits, find commit, grep log, which commit added, pickaxe, search history]
+category: inspect history
+questions:
+  - id: by
+    ask: Search by
+    type: choice
+    options:
+      - {label: "Words in the commit message", value: "message"}
+      - {label: "Text that was added or removed in the code", value: "code"}
+  - {id: text, ask: "Search for", type: text}
+steps:
+  - when: '{{eq .by "message"}}'
+    git: [log, --all, --oneline, -i, "--grep={{.text}}"]
+  - when: '{{eq .by "code"}}'
+    git: [log, --all, --oneline, "-S{{.text}}"]
+predict: Lists matching commits on every branch. Nothing changes.

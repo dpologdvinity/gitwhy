@@ -1,0 +1,9 @@
+title: Change a remote's URL (moved repo, https to ssh)
+aliases: [change remote url, set-url, repo moved, switch to ssh, change origin]
+category: sync with remote
+questions:
+  - {id: name, ask: "Which remote?", type: remote}
+  - {id: url, ask: "New URL", type: text}
+steps:
+  - git: [remote, set-url, "{{.name}}", "{{.url}}"]
+predict: "{{.name}} now points to {{.url}}. Branches and history don't change."

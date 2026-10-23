@@ -1,0 +1,7 @@
+title: Check out every folder again (turn off sparse checkout)
+aliases: [disable sparse checkout, all folders, full checkout, sparse checkout off]
+category: monorepo
+questions: []
+steps:
+  - git: [sparse-checkout, disable]
+predict: Every folder comes back on disk. Nothing in history changes.

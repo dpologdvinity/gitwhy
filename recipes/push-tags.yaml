@@ -1,0 +1,7 @@
+title: Push my tags
+aliases: [push tags, upload tags, publish tags]
+category: sync with remote
+questions: []
+steps:
+  - git: [push, "{{.remote}}", --tags]
+predict: Every local tag not yet on {{.remote}} is uploaded. Existing remote tags aren't changed.

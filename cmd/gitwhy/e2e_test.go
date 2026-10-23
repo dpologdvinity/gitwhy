@@ -506,3 +506,29 @@ func TestPushedCommitWarning(t *testing.T) {
 	}
 	expect(t, "nothing ran", c.git("log", "-1", "--format=%s", "HEAD~2"), "c3", out)
 }
+
+func TestNewRecipes(t *testing.T) {
+	r := newRepo(t)
+	out := r.do("create-tag", text("v1.0.0"), commit("c3"), text("first release"), text("n"), yes)
+	expect(t, "tag", r.git("rev-parse", "v1.0.0^{commit}"), r.git("rev-parse", "HEAD~1"), out)
+
+	r.write("f2.txt", "changed\n")
+	out = r.do("restore-file-from-commit", pick("f1.txt"), commit("c1"), yes)
+	expect(t, "f1 from c1", r.read("f1.txt"), "1\n", out)
+
+	out = r.do("untrack-file", pick("f4.txt"), text("0"), yes)
+	expect(t, "untracked", r.git("status", "--porcelain", "--", "f4.txt"), "D  f4.txt\n?? f4.txt", out)
+	expect(t, "kept on disk", r.read("f4.txt"), "4\n", out)
+
+	out = r.do("change-commit-author", pick("Someone else"), text("Ada <ada@example.com>"), yes)
+	expect(t, "author", r.git("log", "-1", "--format=%an <%ae>"), "Ada <ada@example.com>", out)
+}
+
+func TestBisectRecipe(t *testing.T) {
+	r := newRepo(t) // f3.txt appears in c3: "test" fails once it exists
+	out := r.do("find-bug-commit", commit("c1"), text("test ! -e f3.txt"), yes)
+	if !regexp.MustCompile(`is the first '?bad'? commit`).MatchString(out) || !strings.Contains(out, "c3") {
+		t.Fatalf("bisect didn't find c3:\n%s", out)
+	}
+	expect(t, "back on main", r.git("branch", "--show-current"), "main", out)
+}

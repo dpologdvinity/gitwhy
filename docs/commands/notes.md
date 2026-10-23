@@ -16,7 +16,7 @@ Attach text to commits (or other objects) without changing their IDs. `git log` 
 
 | Subcommand | What it does |
 |------------|--------------|
-| `list` | Print an object's note, or all as `<note-blob> <object>` lines. |
+| `list` | Print an object's note blob ID, or all as `<note-blob> <object>` lines. |
 | `add` | Add a note. Fails if one exists (unless `-f`); with no message flags, edits the existing one. |
 | `copy` | Copy a note to another object. |
 | `append` | Append to a note, or create it. |
@@ -55,7 +55,7 @@ No flags. `git notes list [<object>]`.
 |------|--------------|
 | `-f`, `--[no-]force` | Overwrite `<to>`'s note. |
 | `--[no-]stdin` | Read `<from> <to>` lines from stdin (`post-rewrite` format). No command-line objects. |
-| `--[no-]for-rewrite=<command>` | With `--stdin`: copy as `amend` or `rebase` would, per `notes.rewrite.*`. For hooks. |
+| `--[no-]for-rewrite=<command>` | Implies `--stdin`. Copy as `amend` or `rebase` would, per `notes.rewrite.*`. For hooks. |
 
 ### git notes append
 

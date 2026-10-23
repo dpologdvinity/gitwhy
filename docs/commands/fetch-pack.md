@@ -11,7 +11,7 @@ Prints fetched refs as `<id> <ref>` lines.
 | Flag | What it does |
 |------|--------------|
 | `<repository>` | Remote URL or path (`[<host>:]<directory>` works). |
-| `<refs>...` | Remote refs to fetch. Default: all heads. Raw IDs work if the server allows (`uploadpack.allowTipSHA1InWant`, `allowReachableSHA1InWant`, `allowAnySHA1InWant`). |
+| `<refs>...` | Remote refs to fetch (e.g. `refs/heads/main`). None given and no `--all`/`--stdin`: fetches nothing. Raw IDs work if the server allows (`uploadpack.allowTipSHA1InWant`, `allowReachableSHA1InWant`, `allowAnySHA1InWant`). |
 | `--all` | Fetch every remote ref. |
 | `--stdin` | Also read refs from stdin, one per line. With `--stateless-rpc`: pkt-lines ending in flush. |
 | `-q`, `--quiet` | Less output (passes `-q` to `git unpack-objects`). |

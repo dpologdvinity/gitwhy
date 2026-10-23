@@ -22,7 +22,7 @@ Short names: `git config trailer.sign.key "Signed-off-by"` allows `--trailer "si
 | `--[no-]if-exists=<action>` | When the key exists: `addIfDifferentNeighbor` (default; add unless same key+value adjacent), `addIfDifferent` (unless same key+value anywhere), `add`, `replace` (drop nearest same-key, then add), `doNothing`. Overrides `trailer.ifExists`; `--no-if-exists` reverts to config. |
 | `--[no-]if-missing=<action>` | When the key is absent: `add` (default) or `doNothing`. Overrides `trailer.ifMissing`; `--no-if-missing` reverts to config. |
 | `--[no-]only-trailers` | Print only trailers. |
-| `--[no-]only-input` | Print only input trailers; add none. |
+| `--[no-]only-input` | Add no trailers (from `--trailer` or config); keep only input ones. |
 | `--[no-]unfold` | Join multi-line values onto one line. |
 | `--parse` | `--only-trailers --only-input --unfold`: list input trailers. For scripts. |
 | `--[no-]divider` | `---` ends the message (default). `--no-divider` for plain messages, not emails/patches. |

@@ -1,6 +1,6 @@
 # git merge-file
 
-Three-way merge of single files: apply `<base>`-to-`<other>` changes onto `<current>`, overwriting it. Conflicts get markers. Exit code: conflict count (max 127), 0 if clean, negative on error. No repo needed.
+Three-way merge of single files: apply `<base>`-to-`<other>` changes onto `<current>`, overwriting it. Conflicts get markers. Exit code: conflict count (max 127), 0 if clean, negative on error. No repo needed (except `--object-id`).
 
 **Usage:** `git merge-file [<flags>] [-L <current-name> [-L <base-name> [-L <other-name>]]] <current> <base> <other>`
 

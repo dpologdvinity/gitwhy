@@ -1,0 +1,10 @@
+title: Make my branch track a remote branch
+aliases: [set upstream, track remote branch, no upstream, upstream branch, push -u]
+category: sync with remote
+checks:
+  - {if: detached-head, block: "You're not on a branch."}
+questions:
+  - {id: target, ask: "Track which remote branch?", type: branch, source: remote}
+steps:
+  - git: [branch, "--set-upstream-to={{.target}}"]
+predict: "{{.branch}} will pull from and compare against {{.target}}. Nothing else changes."

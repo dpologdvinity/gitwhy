@@ -1,0 +1,20 @@
+title: Fix the author of the last commit
+aliases: [change author, wrong email, wrong name, commit author, reset author]
+category: rewrite history
+checks:
+  - {if: no-commits, block: "There are no commits yet."}
+  - {if: head-is-pushed, warn: "The last commit is already on the remote. Changing it rewrites it; you'll need to force-push."}
+questions:
+  - id: who
+    ask: "Set the author to"
+    type: choice
+    options:
+      - {label: "Me (my current user.name and user.email)", value: "me"}
+      - {label: "Someone else", value: "other"}
+  - {id: author, ask: "Author as \"Name <email>\"", type: text, when: '{{eq .who "other"}}'}
+steps:
+  - when: '{{eq .who "me"}}'
+    git: [commit, --amend, --only, --allow-empty, --no-edit, --reset-author]
+  - when: '{{eq .who "other"}}'
+    git: [commit, --amend, --only, --allow-empty, --no-edit, "--author={{.author}}"]
+predict: The last commit gets the new author and a new ID. Its changes and message stay the same.

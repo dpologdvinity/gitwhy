@@ -1,0 +1,19 @@
+title: See what I've changed (not committed yet)
+aliases: [diff, what did i change, uncommitted changes, git diff, staged changes]
+category: inspect history
+questions:
+  - id: which
+    ask: Which changes?
+    type: choice
+    options:
+      - {label: "Not staged yet", value: "unstaged"}
+      - {label: "Staged (what the next commit will have)", value: "staged"}
+      - {label: "Both", value: "both"}
+steps:
+  - when: '{{eq .which "unstaged"}}'
+    git: [diff]
+  - when: '{{eq .which "staged"}}'
+    git: [diff, --staged]
+  - when: '{{eq .which "both"}}'
+    git: [diff, HEAD]
+predict: Shows the line-by-line changes. Nothing changes.

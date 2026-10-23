@@ -1,0 +1,9 @@
+title: Stop tracking a file but keep it (e.g. committed .env)
+aliases: [untrack, stop tracking, remove from git keep file, rm --cached, gitignore not working, ignore committed file]
+category: files
+explain: Add the file to .gitignore too, or it can be added again. If it held secrets, they're still in history (see "Remove a file from all history").
+questions:
+  - {id: files, ask: "Which files?", type: files, source: tracked, multi: true}
+steps:
+  - git: [rm, --cached, -r, --, "{{.files}}"]
+predict: The files stay on your disk but will be deleted from the repo in your next commit.

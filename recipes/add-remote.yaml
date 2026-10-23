@@ -1,0 +1,12 @@
+title: Connect to a remote repository (add a remote)
+aliases: [add remote, add origin, connect github, remote add, new remote, upstream remote]
+category: sync with remote
+questions:
+  - {id: name, ask: "Name for it (origin, upstream, ...)", type: text, default: "origin"}
+  - {id: url, ask: "URL (https://... or git@...)", type: text}
+  - {id: fetch, ask: "Fetch its branches now?", type: confirm, default: "true"}
+steps:
+  - git: [remote, add, "{{.name}}", "{{.url}}"]
+  - when: '{{eq .fetch "true"}}'
+    git: [fetch, "{{.name}}"]
+predict: "Remote {{.name}} points to {{.url}}. You can push and pull with it."

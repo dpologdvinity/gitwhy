@@ -44,6 +44,10 @@ func Explain(k *kb.KB, repo *git.Repo, args []string) []Part {
 	afterDash := false
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
+		if cmd == "bisect" && sub == "run" {
+			parts = append(parts, Part{strings.Join(rest[i:], " "), "the test command git runs on each commit (exit 0 = good)"})
+			break
+		}
 		switch {
 		case afterDash:
 			parts = append(parts, Part{tok, "file or folder to act on"})
@@ -53,7 +57,12 @@ func Explain(k *kb.KB, repo *git.Repo, args []string) []Part {
 		case strings.HasPrefix(tok, "-") && len(tok) > 1:
 			f, ok := k.Lookup(cmd, sub, tok)
 			if ok {
-				parts = append(parts, Part{tok, f.Desc})
+				meaning := f.Desc
+				// Docs describe the positive form; "--no-x" turns it off.
+				if name, _, _ := strings.Cut(tok, "="); strings.HasPrefix(name, "--no-") && strings.Contains(f.Display, "[no-]") {
+					meaning = "Turns off " + "--" + strings.TrimPrefix(name, "--no-") + ": " + f.Desc
+				}
+				parts = append(parts, Part{tok, meaning})
 				// "-m <msg>": the next word is this flag's value.
 				if f.Value != "" && !f.Optional && !strings.Contains(tok, "=") && i+1 < len(rest) && takesSeparateValue(f, tok) {
 					i++

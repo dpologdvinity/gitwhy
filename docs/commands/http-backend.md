@@ -28,7 +28,7 @@ None. Configured by environment and per-repo config.
 |---------|--------------|
 | `http.uploadpack` | Serve fetch, clone, `ls-remote`. Default on. |
 | `http.receivepack` | Accept push. Default: authenticated only. `true` = all, `false` = none. |
-| `http.getanyfile` | Let pre-1.6.6 clients read any repo file. Default on. |
+| `http.getanyfile` | Let pre-1.6.6 clients read any repo file, including unreachable objects. Default on. |
 | `http.uploadarchive` | Serve `git archive --remote` (v2 only). Default off. |
 
 Anonymous read, authenticated push: require auth on URLs ending `/git-receive-pack` and queries with `service=git-receive-pack`.

@@ -26,7 +26,7 @@ Apply a patch to files, optionally the index. Doesn't commit (use `git am` for e
 | `-p<n>` | Strip `<n>` leading path parts. Default 1 (`a/`, `b/`). |
 | `-C<n>` | Require only `<n>` context lines to match. Default: all. |
 | `--[no-]unidiff-zero` | Accept zero-context patches (`--unified=0`). Less safe. |
-| `--no-add` | Apply only deletions. |
+| `--no-add` | Skip the patch's added lines; apply only removed ones. |
 | `--add` | Apply additions too. Cancels `--no-add`. |
 | `--allow-binary-replacement`, `--binary` | No-op; binary patches always allowed. |
 | `--exclude=<path-pattern>` | Skip matching files. Repeatable. |

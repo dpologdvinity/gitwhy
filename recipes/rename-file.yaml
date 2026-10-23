@@ -1,0 +1,9 @@
+title: Rename or move a file
+aliases: [rename file, move file, git mv]
+category: files
+questions:
+  - {id: from, ask: "Which file?", type: files, source: tracked}
+  - {id: to, ask: "New path", type: text}
+steps:
+  - git: [mv, "{{.from}}", "{{.to}}"]
+predict: "{{.from}} becomes {{.to}}, staged for the next commit."

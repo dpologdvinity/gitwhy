@@ -1,0 +1,8 @@
+title: See the history of one file
+aliases: [file history, who changed this file, log file, follow file, file changes over time]
+category: inspect history
+questions:
+  - {id: file, ask: "Which file?", type: files, source: tracked}
+steps:
+  - git: [log, --follow, -p, --, "{{.file}}"]
+predict: Shows every commit that changed {{.file}}, with its changes, following renames. Nothing changes.

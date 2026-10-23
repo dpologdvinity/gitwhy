@@ -1,6 +1,6 @@
 # git commit-graph
 
-Write or verify the commit-graph: a history cache that speeds up `log`, `merge-base`, and path history. `git gc` and `git fetch` usually maintain it. Disabled with replace objects or grafts.
+Write or verify the commit-graph: a history cache that speeds up `log`, `merge-base`, and path history. `git gc` usually maintains it (`git fetch` only with `fetch.writeCommitGraph`). Disabled with replace objects or grafts.
 
 **Usage:** `git commit-graph (write | verify) [<flags>]`
 

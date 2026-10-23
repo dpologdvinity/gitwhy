@@ -1,0 +1,8 @@
+title: Remove a worktree folder
+aliases: [remove worktree, delete worktree, worktree remove]
+category: monorepo
+questions:
+  - {id: dir, ask: "Worktree folder (see git worktree list)", type: text}
+steps:
+  - git: [worktree, remove, "{{.dir}}"]
+predict: The folder {{.dir}} is deleted, including ignored files in it. git refuses if it has uncommitted changes. Its branch stays.

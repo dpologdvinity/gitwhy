@@ -1,0 +1,9 @@
+title: Get an old version of a file back
+aliases: [old version of file, restore file from commit, revert one file, checkout file from commit]
+category: files
+questions:
+  - {id: file, ask: "Which file?", type: files, source: tracked}
+  - {id: commit, ask: "From which commit?", type: commit, source: HEAD}
+steps:
+  - git: [restore, "--source={{.commit}}", --, "{{.file}}"]
+predict: "{{.file}} becomes its version from {{.commit}}. Your current edits to it are replaced (gitwhy undo brings them back). Nothing is committed."

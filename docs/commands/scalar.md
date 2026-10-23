@@ -26,7 +26,7 @@ Before the subcommand.
 | `run` | Run one maintenance task now. |
 | `reconfigure` | Reapply scalar settings. |
 | `diagnose` | Zip logs and stats for a bug report. |
-| `delete` | Delete an enlistment from disk and unregister it. |
+| `delete` | Delete an enlistment from disk (unpushed work too) and unregister it. |
 | `help` | Open this manual page. |
 | `version` | Print version. |
 
@@ -101,7 +101,7 @@ No flags. Writes a `.zip` in a folder next to `src`.
 
 **Usage:** `scalar delete <enlistment>`
 
-No flags. Deletes the whole enlistment folder.
+No flags. Deletes the whole enlistment folder, including uncommitted and unpushed work.
 
 ### scalar help
 

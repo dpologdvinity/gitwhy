@@ -11,7 +11,7 @@ Low-level: load a tree into the index. Files untouched unless `-u`. With `-m`, m
 | `<tree-ish>` | One to three trees or commits. See [Merging](#merging). |
 | `-m` | Merge. Refuses if unmerged entries remain. |
 | `--[no-]reset` | Like `-m`, but drop unmerged entries. With `-u`, overwrites local changes and untracked files. |
-| `-u` | Update working files after a successful merge. |
+| `-u` | Update working files after a successful merge. Silently overwrites ignored files; refuses other untracked ones. |
 | `-i` | Skip the working-tree check. For merging into a temp index (`GIT_INDEX_FILE`). |
 | `-n`, `--[no-]dry-run` | Check for failure; change nothing. |
 | `-v`, `--[no-]verbose` | Checkout progress. |
@@ -19,7 +19,7 @@ Low-level: load a tree into the index. Files untouched unless `-u`. With `-m`, m
 | `--[no-]aggressive` | Three trees: also resolve one-side delete (delete), both delete (delete), identical adds (add). |
 | `--prefix=<prefix>/` | Add the tree under `<prefix>/` to the current index. Won't overwrite entries. For subtree merges. |
 | `--index-output=<file>` | Write result to `<file>` (index stays locked). Must be on the index's filesystem, in a writable folder. |
-| `--exclude-per-directory=<gitignore>` | Obsolete. Only `.gitignore`, only with `-u`. |
+| `--exclude-per-directory=<gitignore>` | Obsolete no-op. Only `.gitignore`, only with `-u`. |
 | `--[no-]recurse-submodules[=<checkout>]` | Update active submodules to recorded commits (detached `HEAD`). |
 | `--no-sparse-checkout` | Ignore sparse checkout even if `core.sparseCheckout`. |
 | `--sparse-checkout` | Apply sparse checkout (default). |

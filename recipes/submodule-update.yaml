@@ -1,0 +1,7 @@
+title: Download or update submodules
+aliases: [submodule, submodules empty, init submodules, update submodules, submodule folder empty]
+category: monorepo
+questions: []
+steps:
+  - git: [submodule, update, --init, --recursive]
+predict: Each submodule folder gets the exact commit this repo records. Local commits inside submodules stay, but their checkout moves.

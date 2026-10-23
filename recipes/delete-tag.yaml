@@ -1,0 +1,16 @@
+title: Delete a tag
+aliases: [delete tag, remove tag, wrong tag, untag]
+category: branches
+questions:
+  - {id: name, ask: "Tag name", type: text}
+  - id: where
+    ask: Delete it where?
+    type: choice
+    options:
+      - {label: "Only on my computer", value: "local"}
+      - {label: "On my computer and on the remote", value: "both", danger: "The tag is deleted on the remote for everyone."}
+steps:
+  - git: [tag, -d, "{{.name}}"]
+  - when: '{{eq .where "both"}}'
+    git: [push, "{{.remote}}", --delete, "refs/tags/{{.name}}"]
+predict: "Tag {{.name}} is deleted{{if eq .where \"both\"}} locally and on {{.remote}}{{else}} locally{{end}}. The commit it pointed to stays."

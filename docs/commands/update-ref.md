@@ -2,9 +2,9 @@
 
 Low-level: safely set or delete a ref (branch, tag, `HEAD`, ...), optionally checking its old value first.
 
-- `git update-ref <ref> <new-id>`: point `<ref>` at `<new-id>`. `HEAD` updates the current branch.
+- `git update-ref <ref> <new-id>`: point `<ref>` at `<new-id>`. `HEAD` updates the current branch. No fast-forward check: commits only on the old value drop off the branch (reflog keeps them).
 - `git update-ref <ref> <new-id> <old-id>`: only if `<ref>` is `<old-id>`. 40 zeros or `""` requires the ref not exist.
-- `git update-ref -d <ref> [<old-id>]`: delete (only if `<old-id>`, if given).
+- `git update-ref -d <ref> [<old-id>]`: delete (only if `<old-id>`, if given). No merged check; its reflog goes too.
 - `--stdin`: apply many commands together.
 
 For symbolic refs use [`git symbolic-ref`](symbolic-ref.md) or the `symref-*` commands below.

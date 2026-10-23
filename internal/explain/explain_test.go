@@ -24,6 +24,8 @@ func TestExplain(t *testing.T) {
 		{"diff main...feature", []string{"", "since they split"}},
 		{"checkout --ours -- a.txt", []string{"", "", "end of options", "file or folder"}},
 		{"stash pop stash@{1}", []string{"", "", "stash number 1"}},
+		{"commit --amend --no-edit", []string{"", "", "Turns off --edit"}},
+		{"bisect run sh -c make test", []string{"", "", "test command"}},
 	}
 	for _, c := range cases {
 		parts := Explain(k, nil, strings.Fields(c.cmd))

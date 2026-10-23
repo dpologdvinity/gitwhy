@@ -1,0 +1,15 @@
+title: Find which commit broke something (bisect)
+aliases: [bisect, find bug, which commit broke, regression, git bisect]
+category: inspect history
+explain: Git checks out commits between good and bad and runs your test command on each; exit code 0 means good.
+checks:
+  - {if: dirty-tree, block: "Commit or stash your changes first.", suggest: stash-save}
+  - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
+questions:
+  - {id: good, ask: "A commit where it still worked", type: commit, source: HEAD}
+  - {id: test, ask: "Test command (exit 0 = works), e.g. npm test", type: text}
+steps:
+  - git: [bisect, start, HEAD, "{{.good}}"]
+  - git: [bisect, run, sh, -c, "{{.test}}"]
+  - git: [bisect, reset]
+predict: Git binary-searches the commits after {{.good}} and prints the first one where the test fails. You end up back where you started.

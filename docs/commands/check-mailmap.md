@@ -1,6 +1,6 @@
 # git check-mailmap
 
-Print each contact's canonical `Name <email>` per `.mailmap` (which maps old or misspelled identities to one), or the input unchanged if unmapped.
+Print each contact's canonical `Name <email>` per `.mailmap` (which maps old or misspelled identities to one), else the input as `Name <email>` or `<email>`.
 
 Contacts: `Name <user@host>`, `<user@host>`, or `user@host`. One output line each; name shown only if given or known to the mailmap.
 

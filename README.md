@@ -5,33 +5,7 @@
 For interns, new grads, and anyone who still searches "how to undo last commit".
 No AI, no account, no network: one binary that runs the real `git`.
 
-```
-$ gitwhy undo last commit
-
-Undo last commit
-? Keep the changes from that commit?
-  > Yes, staged (ready to commit again)
-    Yes, unstaged (in your files only)
-    No, delete them  ⚠ The commit's changes AND all your uncommitted changes are deleted.
-
-What will happen
-  main moves from 2260da9 to 8c51201 "one".
-  Commits leaving main (1):
-      2260da9 two
-  Their changes stay staged (1):
-      a.txt
-
-Command
-  git reset --soft HEAD~1
-    reset   Move the current branch to another commit, or unstage files.
-    --soft  Move the branch only; changes stay staged.
-    HEAD~1  1 commit(s) before the commit you're on now
-
-? Run it? Yes
-$ git reset --soft HEAD~1
-
-✓ Done. Undo with: gitwhy undo
-```
+![gitwhy demo: undo last commit with a preview, then undo the undo](docs/demo.gif)
 
 ## What it does
 
@@ -66,10 +40,14 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 ## Install
 
-Needs git 2.38+ on Linux or WSL (Git Bash and macOS untested for now).
+Needs git 2.38+. Linux and WSL tested; macOS builds but is untested; Git Bash not yet.
 
-Download a binary from [Releases](https://github.com/dpologdvinity/gitwhy/releases), unpack it, and put
-`gitwhy` on your `PATH` (e.g. `~/.local/bin`). Or build from source (Go 1.24+):
+```sh
+curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
+```
+
+That downloads the latest [release](https://github.com/dpologdvinity/gitwhy/releases), checks its
+checksum, and puts `gitwhy` in `~/.local/bin`. Or build from source (Go 1.24+):
 
 ```sh
 git clone https://github.com/dpologdvinity/gitwhy && cd gitwhy

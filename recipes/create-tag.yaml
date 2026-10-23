@@ -1,0 +1,13 @@
+title: Tag a release (create a tag)
+aliases: [tag, create tag, release tag, version tag, mark release]
+category: branches
+questions:
+  - {id: name, ask: "Tag name (e.g. v1.2.0)", type: text}
+  - {id: commit, ask: "Tag which commit?", type: commit, source: HEAD}
+  - {id: message, ask: "Release note (one line)", type: text}
+  - {id: push, ask: "Push the tag to the remote too?", type: confirm, default: "false"}
+steps:
+  - git: [tag, -a, "{{.name}}", -m, "{{.message}}", "{{.commit}}"]
+  - when: '{{eq .push "true"}}'
+    git: [push, "{{.remote}}", "refs/tags/{{.name}}"]
+predict: "Tag {{.name}} marks {{.commit}}.{{if eq .push \"true\"}} It's also pushed to {{.remote}}.{{end}}"
