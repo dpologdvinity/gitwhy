@@ -13,6 +13,18 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+nfpms:
+  - id: gitwhy
+    package_name: gitwhy
+    maintainer: Kaitlyn Bassford <dpologdvinity@users.noreply.github.com>
+    homepage: https://github.com/dpologdvinity/gitwhy
+    description: Do anything with git without looking it up, with previews and undo
+    license: MIT
+    formats: [deb, rpm, apk, archlinux]
+    dependencies: [git]
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/gitwhy/LICENSE
 checksum:
   name_template: checksums.txt
 homebrew_casks:

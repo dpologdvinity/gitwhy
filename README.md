@@ -59,6 +59,23 @@ On Windows, download the zip from the [releases](https://github.com/dpologdvinit
 curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
 ```
 
+**Debian, Ubuntu** (apt):
+
+```sh
+sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.asc -o /etc/apt/keyrings/gitwhy.asc
+echo "deb [signed-by=/etc/apt/keyrings/gitwhy.asc] https://dpologdvinity.github.io/gitwhy/apt ./" | sudo tee /etc/apt/sources.list.d/gitwhy.list
+sudo apt update && sudo apt install gitwhy
+```
+
+**Fedora, RHEL** (dnf):
+
+```sh
+sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.repo -o /etc/yum.repos.d/gitwhy.repo
+sudo dnf install gitwhy
+```
+
+Each release also has `.deb`, `.rpm`, `.apk` (Alpine) and `.pkg.tar.zst` (Arch) files you can install directly.
+
 Or with Homebrew: `brew install dpologdvinity/gitwhy/gitwhy`. Or with npm or bun (Node 18+):
 `npm i -g @kaitlynbassford/gitwhy` / `bun add -g @kaitlynbassford/gitwhy`, or `npx @kaitlynbassford/gitwhy` to try it (the command is still `gitwhy`). The binary is downloaded from the
 release and checked against its checksum, at install or on first run.

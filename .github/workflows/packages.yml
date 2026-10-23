@@ -1,0 +1,24 @@
+name: packages
+on:
+  pull_request:
+    paths:
+      - .goreleaser.yaml
+      - scripts/build-repos.sh
+      - scripts/test-repos.sh
+      - .github/workflows/packages.yml
+jobs:
+  repos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish
+      - name: Build the repos with a throwaway key and install from them (Ubuntu, Fedora)
+        run: scripts/test-repos.sh dist
