@@ -42,11 +42,23 @@ func (a *App) builtins() recipe.Answers {
 }
 
 // RunRecipe walks the user through a recipe and runs it.
-func (a *App) RunRecipe(r *recipe.Recipe) error {
+func (a *App) RunRecipe(r *recipe.Recipe) error { return a.RunRecipeWith(r, nil) }
+
+// RunRecipeWith runs a recipe with some answers already given (e.g. the commit picked in the TUI);
+// those questions are skipped.
+func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 	if err := a.needRepo(); err != nil {
 		return err
 	}
 	ans := a.builtins()
+	for k, v := range preset {
+		ans[k] = v
+		if q := r.Question(k); q != nil && q.Type == "commit" {
+			a.deriveCommit(q.ID, v.(string), ans)
+		} else if q != nil && q.Type == "branch" {
+			a.deriveBranch(q.ID, v.(string), ans)
+		}
+	}
 	heading(r.Title)
 	for _, c := range r.Checks {
 		if !recipe.Test(a.Repo, c.If) {
@@ -76,7 +88,7 @@ func (a *App) RunRecipe(r *recipe.Recipe) error {
 	}
 	for i := range r.Questions {
 		q := &r.Questions[i]
-		if r.AskedLater(q.ID) {
+		if _, given := preset[q.ID]; given || r.AskedLater(q.ID) {
 			continue
 		}
 		if err := a.ask(q, ans); err != nil {
@@ -210,12 +222,16 @@ func (a *App) askBranch(q *recipe.Question, title, def string, ans recipe.Answer
 		v = ""
 	}
 	err = prompt(huh.NewSelect[string]().Title(title).Description("Type / to filter").Options(opts...).Value(&v).Filtering(false).Height(min(len(opts)+2, 15)))
-	ans[q.ID] = v
-	// Where a local branch pushes/pulls: its exact remote and remote branch name.
-	ans[q.ID+"_remote"], _ = a.Repo.Output("config", "branch."+v+".remote")
-	merge, _ := a.Repo.Output("config", "branch."+v+".merge")
-	ans[q.ID+"_merge"] = strings.TrimPrefix(merge, "refs/heads/")
+	a.deriveBranch(q.ID, v, ans)
 	return err
+}
+
+// deriveBranch sets a branch answer plus where it pushes/pulls: _remote and _merge (remote branch).
+func (a *App) deriveBranch(id, v string, ans recipe.Answers) {
+	ans[id] = v
+	ans[id+"_remote"], _ = a.Repo.Output("config", "branch."+v+".remote")
+	merge, _ := a.Repo.Output("config", "branch."+v+".merge")
+	ans[id+"_merge"] = strings.TrimPrefix(merge, "refs/heads/")
 }
 
 func (a *App) askCommit(q *recipe.Question, title string, ans recipe.Answers) error {
@@ -241,16 +257,22 @@ func (a *App) askCommit(q *recipe.Question, title string, ans recipe.Answers) er
 	if err := prompt(huh.NewSelect[string]().Title(title).Description(q.Help).Options(opts...).Value(&v).Height(min(len(opts)+2, 15))); err != nil {
 		return err
 	}
-	ans[q.ID] = v
+	a.deriveCommit(q.ID, v, ans)
+	return nil
+}
+
+// deriveCommit sets a commit answer and what recipes derive from it: _base (parent or --root),
+// _files (files it changed) and _pushed.
+func (a *App) deriveCommit(id, v string, ans recipe.Answers) {
+	ans[id] = v
 	if parent, err := a.Repo.Output("rev-parse", "-q", "--verify", v+"^"); err == nil {
-		ans[q.ID+"_base"] = parent
+		ans[id+"_base"] = parent
 	} else {
-		ans[q.ID+"_base"] = "--root"
+		ans[id+"_base"] = "--root"
 	}
 	files, _ := a.Repo.Output("diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "-z", v)
-	ans[q.ID+"_files"] = splitZ(files)
-	ans[q.ID+"_pushed"] = a.pushed(v)
-	return nil
+	ans[id+"_files"] = splitZ(files)
+	ans[id+"_pushed"] = a.pushed(v)
 }
 
 // pushed reports ("true"/"false") whether a commit is on any remote-tracking branch.

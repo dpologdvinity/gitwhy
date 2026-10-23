@@ -16,11 +16,21 @@ No AI, no account, no network: one binary that runs the real `git`.
 - **Recover from plain git too.** `gitwhy recover` reads git's history of your branch ("2h ago: pulled 14 commits from origin/master") and takes you back to before any of it. It also finds lost commits and staged files git still has.
 - **Every git command and flag.** `gitwhy build` walks you through any command with every flag explained in a few words, from [the docs in this repo](docs/README.md) (181 commands, ~3,500 flags, git 2.56).
 
+## The home screen
+
+Run `gitwhy` in a repo. A banner shows an operation in progress ("MERGE IN PROGRESS"), the status line shows
+how far ahead or behind the remote you are, and **Next:** suggests what to do for the current state
+(resolve conflicts, commit what's staged, push). Three tabs: Changes (with a live diff), Commits, Branches.
+Keys act on the selected item and open the same guided recipe as the CLI, with the answers already filled
+in: `r` reword a commit, `d` drop it, `f` add changes to it, `s` split it, `m` move it to a new branch.
+Staging with space is instant, since it's always reversible. `?` shows the keys for the current tab.
+
 ## Commands
 
 | | |
 |---|---|
-| `gitwhy` | Menu |
+| `gitwhy` | Full-screen home: changes, commits, branches, and the next step for your repo's state |
+| `gitwhy menu` | Simple menu |
 | `gitwhy <words>` | Search, e.g. `gitwhy squash commits` |
 | `gitwhy do [recipe]` | Run a guided recipe by name (no name: list them) |
 | `gitwhy run <git command>` | Preview, explain, run with undo: `gitwhy run git rebase main` |

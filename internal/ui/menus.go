@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,46 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/recover"
 	"github.com/dpologdvinity/gitwhy/internal/search"
 	"github.com/dpologdvinity/gitwhy/internal/snapshot"
+	"github.com/dpologdvinity/gitwhy/internal/tui"
 )
+
+// TUI shows the full-screen home and runs what the user picks, then comes back.
+func (a *App) TUI() error {
+	if err := a.needRepo(); err != nil {
+		return a.Home()
+	}
+	for {
+		act, err := tui.Run(a.Repo)
+		if err != nil {
+			return err
+		}
+		switch act.Kind {
+		case "quit":
+			return nil
+		case "search":
+			var q string
+			err = prompt(huh.NewInput().Title("What do you want to do?").Value(&q))
+			if err == nil && q != "" {
+				err = a.Search(q)
+			}
+		case "undo":
+			err = a.Undo(true)
+		case "recover":
+			err = a.Recover()
+		case "build":
+			err = a.Build("", "")
+		case "recipe":
+			if r := a.recipe(act.Recipe); r != nil {
+				err = a.RunRecipeWith(r, act.Preset)
+			}
+		}
+		if err != nil && !errors.Is(err, ErrCancelled) {
+			say("%s", badStyle.Render("✗ "+err.Error()))
+		}
+		var back string
+		_ = prompt(huh.NewInput().Title("Press Enter to go back").Value(&back)) // Ctrl+C here just returns to the TUI
+	}
+}
 
 // Home is the main menu.
 func (a *App) Home() error {

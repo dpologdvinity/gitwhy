@@ -18,7 +18,8 @@ var version = "dev"
 const usage = `gitwhy: do anything with git, see what it will do first, and undo it.
 
 Usage:
-  gitwhy                     menu
+  gitwhy                     full-screen home: changes, commits, branches, next steps
+  gitwhy menu                simple menu
   gitwhy <words...>          search, e.g. gitwhy undo last commit
   gitwhy run <git command>   preview, explain, run, with undo (e.g. gitwhy run reset --hard HEAD~1)
   gitwhy explain <command>   explain each part of a git command without running it
@@ -75,6 +76,9 @@ func run(args []string) error {
 	}
 	app.Quiet = app.Quiet || quiet
 	if len(rest) == 0 {
+		if interactive() {
+			return app.TUI()
+		}
 		return app.Home()
 	}
 	// "gitwhy undo" is the undo command, but "gitwhy undo last commit" is a search.
@@ -85,6 +89,8 @@ func run(args []string) error {
 	switch rest[0] {
 	case "run":
 		return app.Run(rest[1:])
+	case "menu":
+		return app.Home()
 	case "explain":
 		return app.Explain(rest[1:])
 	case "do":
@@ -137,4 +143,13 @@ func checkGit() error {
 		return fmt.Errorf("gitwhy needs git 2.38 or newer; you have %d.%d", major, minor)
 	}
 	return nil
+}
+
+// interactive reports whether the full-screen UI can run (a terminal, not accessible mode).
+func interactive() bool {
+	if os.Getenv("ACCESSIBLE") != "" || os.Getenv("GITWHY_ACCESSIBLE") != "" {
+		return false
+	}
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
