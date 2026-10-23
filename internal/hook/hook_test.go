@@ -138,3 +138,40 @@ func TestPreSavesIgnoredFilesFromSubfolder(t *testing.T) {
 		t.Fatalf("build.log = %q", got)
 	}
 }
+
+func TestUninstallDamagedBlockErrors(t *testing.T) {
+	rc := filepath.Join(t.TempDir(), ".bashrc")
+	if err := os.WriteFile(rc, []byte("export A=1\n# >>> gitwhy hook >>>\neval x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Uninstall(rc); err == nil || !strings.Contains(err.Error(), "end marker") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestUninstallEndMarkerWithoutNewline(t *testing.T) {
+	rc := filepath.Join(t.TempDir(), ".bashrc")
+	if err := os.WriteFile(rc, []byte("export A=1\n# >>> gitwhy hook >>>\neval x\n# <<< gitwhy hook <<<"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := Uninstall(rc); err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	if data, _ := os.ReadFile(rc); string(data) != "export A=1\n" {
+		t.Fatalf("rc = %q", data)
+	}
+}
+
+func TestRCPath(t *testing.T) {
+	t.Setenv("ZDOTDIR", "")
+	if got := RCPath("zsh", "/h"); got != filepath.Join("/h", ".zshrc") {
+		t.Fatalf("zsh = %q", got)
+	}
+	t.Setenv("ZDOTDIR", "/z")
+	if got := RCPath("zsh", "/h"); got != filepath.Join("/z", ".zshrc") {
+		t.Fatalf("zsh with ZDOTDIR = %q", got)
+	}
+	if got := RCPath("bash", "/h"); got != filepath.Join("/h", ".bashrc") {
+		t.Fatalf("bash = %q", got)
+	}
+}
