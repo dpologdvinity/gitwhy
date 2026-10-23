@@ -113,3 +113,51 @@ func TestLineModeStagesPickedLine(t *testing.T) {
 		t.Fatalf("unstaged:\n%s", d)
 	}
 }
+
+func TestLineModeRefusesNoNewlineAtEOF(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "a\nb")
+	r.Write("f.txt", "a\nc")
+	m := &model{repo: r.Repo}
+	m.load()
+	m.key("enter")
+	m.key("v")
+	if m.hunks == nil || m.hunks.lineMode || !strings.Contains(m.msg, "newline") {
+		t.Fatalf("lineMode=%v msg=%q", m.hunks != nil && m.hunks.lineMode, m.msg)
+	}
+}
+
+func TestHunkModeIgnoresUserDiffConfig(t *testing.T) {
+	for _, cfg := range [][2]string{{"diff.noprefix", "true"}, {"color.diff", "always"}, {"diff.suppressBlankEmpty", "true"}, {"diff.external", "false"}} {
+		t.Run(cfg[0], func(t *testing.T) {
+			r := testrepo.New(t)
+			r.Commit("base", "f.txt", "1\n\n3\n"+numbered(20, nil))
+			r.Git("config", cfg[0], cfg[1])
+			r.Write("f.txt", "1\n\n33\n"+numbered(20, nil))
+			m := &model{repo: r.Repo}
+			m.load()
+			m.key("enter")
+			if m.hunks == nil {
+				t.Fatalf("no hunks: %q", m.msg)
+			}
+			m.key("space")
+			if !strings.Contains(r.Git("diff", "--cached", "--no-color", "--no-ext-diff"), "+33") {
+				t.Fatalf("not staged (msg %q)", m.msg)
+			}
+		})
+	}
+}
+
+func TestGraphNotLoadedOffCommitsTab(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	m := &model{repo: r.Repo}
+	m.load()
+	if m.rows != nil {
+		t.Fatal("graph loaded on Changes tab")
+	}
+	m.key("2")
+	if m.count(tabCommits) != 1 {
+		t.Fatalf("count = %d after switching to Commits", m.count(tabCommits))
+	}
+}

@@ -16,7 +16,7 @@ func TestLoadAndSuggest(t *testing.T) {
 	r.Write("b.txt", "staged\n")
 	r.Git("add", "b.txt")
 
-	m := &model{repo: r.Repo}
+	m := &model{repo: r.Repo, tab: tabCommits}
 	m.load()
 	if m.head != "main" || m.count(tabCommits) != 2 || len(m.brs) != 1 {
 		t.Fatalf("head=%q commits=%d branches=%d", m.head, m.count(tabCommits), len(m.brs))

@@ -115,3 +115,26 @@ func TestInstallIdempotentAndUninstall(t *testing.T) {
 		t.Fatal("second uninstall changed the file")
 	}
 }
+
+func TestPreSavesIgnoredFilesFromSubfolder(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", ".gitignore", "*.log\n", "sub/a.txt", "a\n")
+	r.Write("sub/build.log", "keep me\n")
+	sub := filepath.Join(r.Top, "sub")
+	id := Pre(sub, []string{"clean", "-fX", "build.log"})
+	if id == "" {
+		t.Fatal("no snapshot")
+	}
+	r.Git("clean", "-fXq")
+	Post(sub, id)
+	s, err := snapshot.Get(r.Repo, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := snapshot.Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Read("sub/build.log"); got != "keep me\n" {
+		t.Fatalf("build.log = %q", got)
+	}
+}

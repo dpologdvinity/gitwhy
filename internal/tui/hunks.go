@@ -22,7 +22,8 @@ type hunkView struct {
 }
 
 func (m *model) openHunks(path string, staged bool) error {
-	args := []string{"diff"}
+	// Pin the output format: user config (color, prefixes, external diff) would break parsing and apply.
+	args := []string{"-c", "diff.suppressBlankEmpty=false", "diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"}
 	if staged {
 		args = append(args, "--cached")
 	}
@@ -70,6 +71,10 @@ func (m *model) hunkKey(k string) (tea.Model, tea.Cmd) {
 			m.msg = "✗ " + strings.TrimSpace(err.Error())
 		}
 	case "v":
+		if v.fd.Hunks[v.cur].NoEOL() {
+			m.msg = "This hunk touches the end of a file with no final newline: stage it whole with space."
+			return m, nil
+		}
 		v.lineMode, v.sel, v.line = true, make([]bool, len(v.fd.Hunks[v.cur].Lines)), 0
 		v.line = v.nextChange(-1, 1)
 	case "S":

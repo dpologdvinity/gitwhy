@@ -54,6 +54,17 @@ func (h Hunk) Changes() (added, removed int) {
 	return added, removed
 }
 
+// NoEOL reports whether the hunk has a "\\ No newline at end of file" line. Picking single
+// lines out of such a hunk can't be expressed as a patch, so callers stage it whole.
+func (h Hunk) NoEOL() bool {
+	for _, l := range h.Lines {
+		if l[0] == '\\' {
+			return true
+		}
+	}
+	return false
+}
+
 var keepHeader = []string{"diff --git", "index", "---", "+++", "old mode", "new mode", "new file mode", "deleted file mode"}
 
 // Patch builds a patch for hunk h alone, for `git apply --cached --recount`

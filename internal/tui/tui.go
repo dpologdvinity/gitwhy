@@ -129,7 +129,11 @@ func (m *model) load() {
 	if m.head == "(detached)" {
 		m.head = "HEAD (detached)"
 	}
-	m.rows, _ = graph.Load(r, m.all, 200)
+	// The graph walks all history when the repo has no commit-graph file: load it only when shown.
+	m.rows = nil
+	if m.tab == tabCommits {
+		m.rows, _ = graph.Load(r, m.all, 200)
+	}
 	m.brs = nil
 	if refs, err := r.Output("for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(upstream:track)%00%(committerdate:relative)%00%(subject)", "refs/heads", "refs/remotes"); err == nil && refs != "" {
 		for _, l := range strings.Split(refs, "\n") {
@@ -257,7 +261,7 @@ func (m *model) suggest() []string {
 	if strings.Contains(m.ab, "↓") && !strings.HasSuffix(m.ab, "↓0") {
 		s = append(s, "p pull")
 	}
-	if m.up == "" && m.head != "" && !strings.HasPrefix(m.head, "HEAD") && m.count(tabCommits) > 0 {
+	if m.up == "" && m.head != "" && !strings.HasPrefix(m.head, "HEAD") && m.repo.OK("rev-parse", "--verify", "-q", "HEAD") {
 		s = append(s, "P publish this branch")
 	}
 	return s
@@ -288,6 +292,12 @@ func (m *model) key(k string) (tea.Model, tea.Cmd) {
 	m.msg = ""
 	i := m.cursor[m.tab]
 	n := m.count(m.tab)
+	was := m.tab
+	defer func() {
+		if m.tab != was && (m.tab == tabCommits || was == tabCommits) {
+			m.load()
+		}
+	}()
 	switch k {
 	case "q", "ctrl+c", "esc":
 		return m.pick(Action{Kind: "quit"})
@@ -525,6 +535,9 @@ func (m *model) render() string {
 	var tabs []string
 	for t, name := range tabNames {
 		label := fmt.Sprintf("%d %s (%d)", t+1, name, m.count(t))
+		if t == tabCommits && m.tab != tabCommits {
+			label = fmt.Sprintf("%d %s", t+1, name) // not loaded off this tab
+		}
 		if t == m.tab {
 			tabs = append(tabs, tabOn.Render(label))
 		} else {

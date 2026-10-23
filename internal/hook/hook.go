@@ -39,7 +39,16 @@ func Pre(cwd string, args []string) string {
 	if err != nil {
 		return ""
 	}
-	s, err := snapshot.Take(r, "git "+strings.Join(args, " "), preview.Preview(r, args).Save)
+	// Paths in args are relative to the user's folder; Take wants them relative to the repo top.
+	here := *r
+	here.Dir = cwd
+	save := preview.Preview(&here, args).Save
+	if prefix, err := here.Output("rev-parse", "--show-prefix"); err == nil && prefix != "" {
+		for i, p := range save {
+			save[i] = prefix + p
+		}
+	}
+	s, err := snapshot.Take(r, "git "+strings.Join(args, " "), save)
 	if err != nil {
 		return ""
 	}
