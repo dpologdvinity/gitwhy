@@ -79,6 +79,7 @@ type model struct {
 	msg     string // one-line result of the last quick action
 	detail  string
 	action  Action
+	hunks   *hunkView // non-nil while zoomed into a file's hunks
 }
 
 // Run shows the TUI and returns what the user chose.
@@ -269,6 +270,9 @@ func (m *model) pick(a Action) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) key(k string) (tea.Model, tea.Cmd) {
+	if m.hunks != nil {
+		return m.hunkKey(k)
+	}
 	m.msg = ""
 	i := m.cursor[m.tab]
 	n := m.count(m.tab)
@@ -369,6 +373,11 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			if f.conflict() {
 				return run("resolve-conflicts", recipe.Answers{"files": []string{f.path}}), true
 			}
+			if f.untracked() {
+				m.msg = "New file: press space to stage it whole"
+			} else if err := m.openHunks(f.path, !f.unstaged()); err != nil {
+				m.msg = err.Error()
+			}
 		case "d":
 			if f.untracked() {
 				return run("delete-untracked", nil), true
@@ -445,7 +454,7 @@ var (
 	banner  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("3")).Padding(0, 1)
 	addLine = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	delLine = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	hunk    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	hunkCol = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 	tagCol  = map[string]lipgloss.Style{
 		"conflict":      lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
 		"staged":        lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
@@ -493,7 +502,11 @@ func (m *model) render() string {
 			tabs = append(tabs, faint.Render(label))
 		}
 	}
-	lines := []string{top.String(), strings.Join(tabs, "   "), ""}
+	title := strings.Join(tabs, "   ")
+	if m.hunks != nil {
+		title = m.hunkTitle()
+	}
+	lines := []string{top.String(), title, ""}
 
 	sugg := m.suggest()
 	footer := []string{""}
@@ -503,7 +516,9 @@ func (m *model) render() string {
 	if len(sugg) > 0 {
 		footer = append(footer, bold.Render("Next: ")+strings.Join(sugg, " · "))
 	}
-	if m.help {
+	if m.hunks != nil {
+		footer = append(footer, faint.Render("space "+m.hunkKeys()))
+	} else if m.help {
 		footer = append(footer, faint.Render(strings.Join(keys[m.tab], " · ")))
 		footer = append(footer, faint.Render("tab switch · / search · u undo · R what happened? · B any command · P push · p pull · ctrl+r refresh · q quit"))
 	} else {
@@ -513,8 +528,10 @@ func (m *model) render() string {
 	bodyH := max(h-len(lines)-len(footer), 3)
 	leftW := min(max(w*2/5, 30), 60)
 	rightW := w - leftW - 3
-	left := m.list(leftW, bodyH)
-	right := m.detailView(rightW, bodyH)
+	left, right := m.list(leftW, bodyH), colorDiff(m.detail, rightW, bodyH)
+	if m.hunks != nil {
+		left, right = m.hunkList(leftW, bodyH), m.hunkDetail(rightW, bodyH)
+	}
 	for r := 0; r < bodyH; r++ {
 		l, rr := "", ""
 		if r < len(left) {
@@ -560,8 +577,11 @@ func (m *model) list(w, h int) []string {
 			rows = append(rows, mark+b.name+" "+faint.Render(b.track+" "+b.when))
 		}
 	}
-	// Scroll so the cursor stays visible.
-	cur := m.cursor[m.tab]
+	return scroll(rows, m.cursor[m.tab], w, h)
+}
+
+// scroll shows the h rows around cur, truncated to w, with cur highlighted.
+func scroll(rows []string, cur, w, h int) []string {
 	start := 0
 	if cur >= h {
 		start = cur - h + 1
@@ -577,9 +597,9 @@ func (m *model) list(w, h int) []string {
 	return out
 }
 
-func (m *model) detailView(w, h int) []string {
+func colorDiff(text string, w, h int) []string {
 	var out []string
-	for _, l := range strings.Split(m.detail, "\n") {
+	for _, l := range strings.Split(text, "\n") {
 		if len(out) == h {
 			break
 		}
@@ -592,7 +612,7 @@ func (m *model) detailView(w, h int) []string {
 		case strings.HasPrefix(l, "-"):
 			l = delLine.Render(l)
 		case strings.HasPrefix(l, "@@"):
-			l = hunk.Render(l)
+			l = hunkCol.Render(l)
 		}
 		out = append(out, l)
 	}
