@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	bin = filepath.Join(dir, "gitwhy")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
@@ -74,7 +78,7 @@ var (
 // env isolates git config and HOME so tests never touch the user's setup.
 func env(home string) []string {
 	cfg := filepath.Join(home, "gitconfig")
-	os.WriteFile(cfg, []byte("[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n"), 0o644)
+	os.WriteFile(cfg, []byte("[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n[core]\n\tautocrlf = false\n"), 0o644)
 	return append(os.Environ(), "ACCESSIBLE=1", "HOME="+home, "GIT_CONFIG_GLOBAL="+cfg, "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_EDITOR=true", "LC_ALL=C", "XDG_CONFIG_HOME="+home)
 }
@@ -151,6 +155,7 @@ func newRepo(t *testing.T) *repo {
 	r.git("config", "user.name", "Test")
 	r.git("config", "user.email", "test@example.com")
 	r.git("config", "commit.gpgsign", "false")
+	r.git("config", "core.autocrlf", "false")
 	for i := 1; i <= 4; i++ {
 		r.commit(fmt.Sprintf("c%d", i), fmt.Sprintf("f%d.txt", i), fmt.Sprintf("%d\n", i))
 	}

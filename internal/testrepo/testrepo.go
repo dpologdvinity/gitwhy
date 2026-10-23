@@ -26,7 +26,8 @@ func New(t *testing.T) *Repo {
 		{"config", "user.name", "Test"},
 		{"config", "user.email", "test@example.com"},
 		{"config", "commit.gpgsign", "false"},
-		{"config", "core.hooksPath", "/dev/null"},
+		{"config", "core.hooksPath", t.TempDir()},
+		{"config", "core.autocrlf", "false"},
 	} {
 		if _, err := g.Output(args...); err != nil {
 			t.Fatal(err)
