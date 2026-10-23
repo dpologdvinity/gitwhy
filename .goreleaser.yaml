@@ -37,5 +37,14 @@ homebrew_casks:
       owner: dpologdvinity
       name: homebrew-gitwhy
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+scoops:
+  - repository:
+      owner: dpologdvinity
+      name: homebrew-gitwhy # one repo for the Homebrew cask and the Scoop bucket
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: bucket
+    homepage: https://github.com/dpologdvinity/gitwhy
+    description: Do anything with git without looking it up, with previews and undo
+    license: MIT
 changelog:
   use: github
