@@ -52,7 +52,8 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 ## Install
 
-Needs git 2.38+. Linux and WSL tested; macOS builds but is untested; Git Bash not yet.
+Needs git 2.38+. Linux, WSL and Windows (Git Bash or PowerShell, CI-tested) work; macOS builds but is untested.
+On Windows, download the zip from the [releases](https://github.com/dpologdvinity/gitwhy/releases) page.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
