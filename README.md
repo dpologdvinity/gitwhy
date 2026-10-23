@@ -59,7 +59,9 @@ On Windows, download the zip from the [releases](https://github.com/dpologdvinit
 curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
 ```
 
-Or with Homebrew: `brew install dpologdvinity/gitwhy/gitwhy`.
+Or with Homebrew: `brew install dpologdvinity/gitwhy/gitwhy`. Or with npm or bun (Node 18+):
+`npm i -g gitwhy` / `bun add -g gitwhy`, or `npx gitwhy` to try it. The binary is downloaded from the
+release and checked against its checksum, at install or on first run.
 
 That downloads the latest [release](https://github.com/dpologdvinity/gitwhy/releases), checks its
 checksum, and puts `gitwhy` in `~/.local/bin`. Or build from source (Go 1.24+):

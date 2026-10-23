@@ -1,0 +1,14 @@
+{
+  "name": "gitwhy",
+  "version": "0.0.0",
+  "description": "Do anything with git without looking it up, with previews and undo",
+  "license": "MIT",
+  "homepage": "https://github.com/dpologdvinity/gitwhy",
+  "repository": { "type": "git", "url": "git+https://github.com/dpologdvinity/gitwhy.git" },
+  "bugs": { "url": "https://github.com/dpologdvinity/gitwhy/issues" },
+  "keywords": ["git", "cli", "undo", "tui"],
+  "bin": { "gitwhy": "bin/gitwhy.js" },
+  "scripts": { "postinstall": "node install.js", "test": "node --test lib.test.js" },
+  "files": ["bin", "lib.js", "install.js", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" }
+}
