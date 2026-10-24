@@ -39,12 +39,21 @@ function verify(data, sum) {
   if (got !== sum) throw new Error(`checksum mismatch (expected ${sum}, got ${got})`);
 }
 
-function get(url, redirects = 5) {
+/**
+ * Download a URL over HTTPS into memory, following up to `redirects` redirects.
+ * Rejects on a non-200 status, a network error, or `timeoutMs` without any data
+ * (a stalled connection would otherwise hang `npm install` forever).
+ * @param {string} url
+ * @param {number} [redirects=5]
+ * @param {number} [timeoutMs=30000]
+ * @returns {Promise<Buffer>}
+ */
+function get(url, redirects = 5, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'user-agent': 'gitwhy-npm' } }, (res) => {
+    const req = https.get(url, { headers: { 'user-agent': 'gitwhy-npm' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
         res.resume();
-        return resolve(get(new URL(res.headers.location, url).href, redirects - 1));
+        return resolve(get(new URL(res.headers.location, url).href, redirects - 1, timeoutMs));
       }
       if (res.statusCode !== 200) {
         res.resume();
@@ -53,7 +62,11 @@ function get(url, redirects = 5) {
       const chunks = [];
       res.on('data', (d) => chunks.push(d));
       res.on('end', () => resolve(Buffer.concat(chunks)));
-    }).on('error', reject);
+    });
+    // An idle timeout: it fires only when no data arrives for timeoutMs, so slow but steady
+    // downloads still finish. destroy() makes the request emit 'error' with our message.
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`GET ${url}: no response for ${timeoutMs / 1000} s`)));
+    req.on('error', reject);
   });
 }
 
@@ -106,4 +119,4 @@ async function ensure() {
   return bin;
 }
 
-module.exports = { target, expectedSum, verify, tarBin, place, ensure };
+module.exports = { target, expectedSum, verify, get, tarBin, place, ensure };

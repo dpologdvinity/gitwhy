@@ -74,3 +74,18 @@ test('place keeps the winner when another process installed first', () => {
   assert.deepStrictEqual(fs.readdirSync(path.join(root, 'vendor')), ['1.0.0']);
   fs.rmSync(root, { recursive: true });
 });
+
+const net = require('node:net');
+const { get } = require('./lib');
+
+test('get gives up with a clear error when the server never answers', async () => {
+  // A TCP server that accepts the connection and then says nothing, like a stalled network.
+  const server = net.createServer(() => {});
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `https://127.0.0.1:${server.address().port}/x`;
+  try {
+    await assert.rejects(get(url, 0, 200), /GET https:\/\/127\.0\.0\.1:\d+\/x: no response for 0\.2 s/);
+  } finally {
+    server.close();
+  }
+});
