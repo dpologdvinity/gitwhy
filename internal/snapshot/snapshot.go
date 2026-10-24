@@ -195,8 +195,11 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 			s.Files = append(s.Files, f)
 		}
 	}
+	// Only the shared config file: config.worktree is copied above, and writing the effective
+	// value back to the shared file would turn sparse checkout on in every worktree.
+	shared := filepath.Join(r.Common, "config")
 	for _, k := range sparseKeys {
-		s.Sparse[k], _ = r.Output("config", "--get", k)
+		s.Sparse[k], _ = r.Output("config", "--file", shared, "--get", k)
 	}
 
 	if err := s.save(); err != nil {
@@ -482,13 +485,14 @@ func restoreCheckout(r *git.Repo, s, cur *Snapshot) error {
 			return err
 		}
 	}
+	shared := filepath.Join(r.Common, "config")
 	for _, k := range sparseKeys {
 		if v := s.Sparse[k]; v != "" {
-			if _, err := r.Output("config", k, v); err != nil {
+			if _, err := r.Output("config", "--file", shared, k, v); err != nil {
 				return fmt.Errorf("restoring %s: %w", k, err)
 			}
-		} else if r.OK("config", "--get", k) {
-			if _, err := r.Output("config", "--unset", k); err != nil {
+		} else if r.OK("config", "--file", shared, "--get", k) {
+			if _, err := r.Output("config", "--file", shared, "--unset", k); err != nil {
 				return fmt.Errorf("restoring %s: %w", k, err)
 			}
 		}
@@ -768,7 +772,8 @@ func checkout(r *git.Repo, commit string, paths []string) error {
 // restoreMissing brings back files the snapshot had that aren't on disk (for example after a
 // sparse checkout hid them), or reapplies sparse checkout if it's on.
 func restoreMissing(r *git.Repo, s *Snapshot) error {
-	if v := s.Sparse["core.sparseCheckout"]; v == "true" {
+	// The settings are already restored, so this reads the value s had, from either file.
+	if v, _ := r.Output("config", "--bool", "--get", "core.sparseCheckout"); v == "true" {
 		r.Output("sparse-checkout", "reapply")
 		return nil
 	}

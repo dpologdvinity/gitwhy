@@ -675,6 +675,38 @@ func TestIgnoredFilesInReplacedFolderAreSaved(t *testing.T) {
 	}
 }
 
+// TestSparseRedoStaysInThisWorktree proves undo and redo of a sparse checkout don't write
+// sparse settings to the shared config, where every other worktree would pick them up.
+func TestSparseRedoStaysInThisWorktree(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "d1/x", "x\n", "d2/y", "y\n")
+	other := filepath.Join(t.TempDir(), "wt")
+	r.Git("worktree", "add", "-q", "-b", "other", other)
+	s, err := Take(r.Repo, "sparse", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("sparse-checkout", "set", "--cone", "d1")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Restore(r.Repo, res.Before); err != nil {
+		t.Fatal(err)
+	}
+	if r.Read("d2/y") != "<missing>" {
+		t.Errorf("redo didn't bring the sparse checkout back")
+	}
+	if v, _ := r.Output("config", "--file", filepath.Join(r.Common, "config"), "--get", "core.sparseCheckout"); v != "" {
+		t.Errorf("shared config has core.sparseCheckout=%s", v)
+	}
+	o := r.Runner
+	o.Dir = other
+	if v, _ := o.Output("config", "--get", "core.sparseCheckout"); v == "true" {
+		t.Errorf("the other worktree is now sparse")
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()
