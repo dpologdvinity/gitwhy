@@ -420,7 +420,7 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok && (skipped[ref] || elsewhere[ref]) {
 		res.Skipped = append(res.Skipped, "HEAD, the index and your files were left as they are, because "+shortRef(ref)+" was left as is")
 	} else if err := restoreCheckout(r, s, cur); err != nil {
-		return res, err
+		return res, fmt.Errorf("%w\nThe undo is only partly done. Run \"gitwhy undo\" again to go back to how things were before it", err)
 	}
 
 	// 6. Stash list. Stashes made after the command ran stay on top of the restored list.
@@ -468,10 +468,9 @@ func restoreCheckout(r *git.Repo, s, cur *Snapshot) error {
 		return fmt.Errorf("restoring HEAD: %w", err)
 	}
 
-	// 3. Working files: delete files added since, rewrite files that differ.
-	if err := restoreFiles(r, s.Work, cur.Work); err != nil {
-		return err
-	}
+	// 3. Working files: delete files added since, rewrite files that differ. A file that can't be
+	// changed doesn't stop the rest: the index and state are still put back, then it's reported.
+	fileErr := restoreFiles(r, s.Work, cur.Work)
 
 	// 4. Sparse-checkout settings, then the index.
 	for _, f := range sparseFiles {
@@ -520,7 +519,7 @@ func restoreCheckout(r *git.Repo, s, cur *Snapshot) error {
 			return err
 		}
 	}
-	return nil
+	return fileErr
 }
 
 // updateRefs runs one all-or-nothing "git update-ref --stdin" transaction, if tx isn't empty.
@@ -678,6 +677,9 @@ func restoreFiles(r *git.Repo, want, have string) error {
 	if err != nil {
 		return err
 	}
+	// Errors are collected, not returned at once: stopping here would leave files deleted
+	// below and never written back.
+	var errs []error
 	var write []string
 	for _, c := range cs {
 		if isGitlink(c) {
@@ -691,7 +693,8 @@ func restoreFiles(r *git.Repo, want, have string) error {
 				continue
 			}
 			if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+				errs = append(errs, err)
+				continue
 			}
 			removeEmptyParents(r.Top, filepath.Dir(full))
 		default: // changed, deleted or type changed: rewrite from the snapshot
@@ -712,7 +715,7 @@ func restoreFiles(r *git.Repo, want, have string) error {
 			write = append(write, c.path)
 		}
 	}
-	return checkout(r, want, write)
+	return errors.Join(append(errs, checkout(r, want, write))...)
 }
 
 // checkout writes paths from a commit's tree to the working tree, leaving the index alone.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -604,6 +605,35 @@ func TestStashMadeLaterIsKept(t *testing.T) {
 	}
 	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "my later wip") {
 		t.Errorf("skipped = %q", res.Skipped)
+	}
+}
+
+// TestFileErrorStillRestoresOtherFiles proves one file that can't be removed doesn't leave
+// other files deleted: restore carries on, writes every file back, and says how to go back.
+func TestFileErrorStillRestoresOtherFiles(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a read-only folder")
+	}
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Commit("two", "a.txt", "2\n")
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("reset", "-q", "--hard", "HEAD~1")
+	r.Write("ro/new.txt", "n\n")
+	ro := filepath.Join(r.Top, "ro")
+	if err := os.Chmod(ro, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(ro, 0o755) })
+	_, err = Restore(r.Repo, s)
+	if err == nil || !strings.Contains(err.Error(), "gitwhy undo") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := r.Read("a.txt"); got != "2\n" {
+		t.Fatalf("a.txt = %q", got)
 	}
 }
 
