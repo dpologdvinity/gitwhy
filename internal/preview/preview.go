@@ -26,9 +26,19 @@ type Result struct {
 // add appends one formatted line to the preview.
 func (r *Result) add(format string, a ...any) { r.Lines = append(r.Lines, fmt.Sprintf(format, a...)) }
 
+// withGlobs returns a copy of repo that lets git expand pathspec globs. gitwhy's own git calls may
+// treat file names literally, but the command being previewed was typed by the user and the real
+// git will expand its globs, so the preview must too.
+func withGlobs(repo *git.Repo) *git.Repo {
+	c := *repo
+	c.Runner = c.Runner.With("GIT_LITERAL_PATHSPECS=0")
+	return &c
+}
+
 // Preview computes what args (without the leading "git") will do in repo. It never changes the
 // repository. It returns a Result with no Lines when it cannot say anything useful.
 func Preview(repo *git.Repo, args []string) Result {
+	repo = withGlobs(repo)
 	a := danger.Parse(args, danger.Subs)
 	switch a.Cmd {
 	case "reset":

@@ -239,3 +239,18 @@ func TestCheckoutWithEmptyDashDashIsABranchSwitch(t *testing.T) {
 		t.Fatalf("empty -- is not a file list; expected the branch-switch preview:\n%s", s)
 	}
 }
+
+// TestPreviewKeepsGlobsForUserTypedPaths checks that a pathspec typed by the user ('*.log') is
+// previewed the way the real git will run it. gitwhy's own git calls may treat file names
+// literally (GIT_LITERAL_PATHSPECS=1), but the command being previewed must not.
+func TestPreviewKeepsGlobsForUserTypedPaths(t *testing.T) {
+	t.Setenv("GIT_LITERAL_PATHSPECS", "1")
+	r := testrepo.New(t)
+	r.Commit("base", ".gitignore", "*.log\n")
+	r.Write("a.log", "a\n")
+	r.Write("b.log", "b\n")
+	got := Preview(r.Repo, []string{"clean", "-fX", "--", "*.log"})
+	if len(got.Save) != 2 {
+		t.Fatalf("Save = %q, want both .log files matched by the glob", got.Save)
+	}
+}
