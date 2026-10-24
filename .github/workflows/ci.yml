@@ -1,31 +1,168 @@
+# Continuous integration: the quality gates every change must pass.
+#
+# Runs on pushes and pull requests to main, can be started by hand, and is reused (workflow_call)
+# by release.yml so that nothing is published unless these gates pass.
+#
+# Jobs, in order:
+#   setup  - checks that dependencies install and verify, and that everything compiles
+#   lint   - formatting, vet, golangci-lint, govulncheck, actionlint, shellcheck, licenses file
+#   test   - the full test suite on Linux and Windows, with a coverage floor on Linux
+#   build  - builds every release artifact, then installs the Linux packages in clean containers
+#   nix    - builds the Nix flake (catches a stale vendorHash)
+#
+# Every third-party action is pinned to a full commit SHA (the version is in the comment) and every
+# tool is pinned to an exact version; Dependabot proposes updates. No job gets a secret.
 name: ci
+
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+# Least privilege: no job needs to write to the repository.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the older run. Runs on main and release runs are never
+# cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Minimum total statement coverage (percent) of `go test` over ./... on Linux. The suite also runs
+  # end-to-end tests that execute the built binary; those do not count towards this number. To raise
+  # the floor, bump this value in the same change that adds the tests (see CONTRIBUTING.md).
+  COVERAGE_FLOOR: "45"
+  GOLANGCI_LINT_VERSION: v2.15.0
+  GOVULNCHECK_VERSION: v1.9.0
+  ACTIONLINT_VERSION: v1.7.12
+  GORELEASER_VERSION: v2.19.0
+
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  # Validates the environment: modules download and match go.sum, go.mod/go.sum are tidy, and the
+  # whole module compiles. Later jobs share the module cache that setup-go fills.
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y git-lfs git-filter-repo
-      - run: node --test npm/lib.test.js
+          cache: true
+      - run: go mod download
+      - run: go mod verify
+      - name: go.mod and go.sum are tidy
+        run: go mod tidy -diff
+      - run: go build ./...
+
+  # Static checks. Everything here is read-only: it fails the build but never changes files.
+  lint:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt (third_party is vendored code and is left as it came)
+        run: |
+          unformatted=$(git ls-files '*.go' | grep -v '^third_party/' | xargs gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
       - run: go vet ./...
-      - run: go test ./...
-      - name: Remote tests with autocrlf=true (the Git for Windows default)
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+      - name: govulncheck (known vulnerabilities in the code we actually call)
+        run: |
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          govulncheck ./...
+      - name: actionlint (workflow syntax and expressions)
+        run: |
+          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          actionlint
+      - name: shellcheck (shell scripts)
+        run: shellcheck scripts/*.sh install.sh
+      - name: Syntax of the npm and Python files
+        run: |
+          node --check npm/lib.js
+          node --check npm/install.js
+          node --check npm/bin/gitwhy.js
+          python3 -m py_compile scripts/build_index.py scripts/check_coverage.py
+      - name: THIRD_PARTY_LICENSES is up to date
+        run: |
+          scripts/third-party-licenses.sh
+          git diff --exit-code THIRD_PARTY_LICENSES
+
+  # The full test suite. Linux and Windows only, and fail-fast: one red platform stops the other.
+  test:
+    needs: setup
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      # git-lfs and git-filter-repo are optional tools some end-to-end tests use; they skip
+      # when the tool is missing. Git for Windows already ships git-lfs.
+      - name: Install optional test tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y git-lfs git-filter-repo
+      - name: npm package tests
+        run: node --test npm/lib.test.js
+      - name: Go tests with coverage (Linux)
+        if: runner.os == 'Linux'
+        run: go test -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Go tests (Windows)
+        if: runner.os == 'Windows'
+        run: go test ./...
+      - name: Coverage report and floor (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
+          {
+            echo "### Go test coverage"
+            echo
+            echo "Total statement coverage: **${total}%** (floor: ${COVERAGE_FLOOR}%)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          awk -v got="$total" -v floor="$COVERAGE_FLOOR" 'BEGIN { exit !(got + 0 >= floor + 0) }' \
+            || { echo "Coverage ${total}% is below the floor of ${COVERAGE_FLOOR}%"; exit 1; }
+      - name: Keep the coverage profile
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+      # Git for Windows defaults to core.autocrlf=true, which the other tests turn off.
+      - name: Remote tests with autocrlf=true (Windows)
         if: runner.os == 'Windows'
         env:
           GITWHY_TEST_AUTOCRLF: "true"
         run: go test ./cmd/gitwhy/ -run 'TestMakeBranchMatchRemote|TestRecoverPlainGitPull|TestDeleteBranchUsesItsUpstream|TestPushedCommitWarning'
-      - name: install.ps1 (PowerShell 7 and Windows PowerShell 5.1)
+      - name: install.ps1 under PowerShell 7 and Windows PowerShell 5.1 (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -36,7 +173,59 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed under Windows PowerShell" }
           & "$env:GITWHY_BIN_DIR\gitwhy.exe" version
-      - if: runner.os == 'Linux'
-        uses: golangci/golangci-lint-action@v9
+
+  # Builds every release artifact (binaries for Linux, macOS and Windows, packages, checksums) with
+  # goreleaser in snapshot mode, so a release-breaking change is caught before a tag. Then installs
+  # the Linux packages and the signed apt/dnf repositories in clean containers (Docker).
+  build:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: v2.15.0
+          fetch-depth: 0 # goreleaser reads tags and history for versions and the changelog
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: check
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --snapshot --clean --skip=publish
+      - name: Install from the signed apt and dnf repositories (Ubuntu, Fedora)
+        run: scripts/test-repos.sh dist
+      - name: Install the Alpine and Arch packages
+        run: scripts/test-pkgs.sh dist
+      - name: Keep the build artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
+            dist/*.pkg.tar.zst
+            dist/checksums.txt
+          retention-days: 7
+
+  # Builds the Nix flake from source. It fails when go.mod or go.sum change and the vendorHash in
+  # flake.nix is stale.
+  nix:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # 31.11.3
+      - run: nix build .#default --print-build-logs
+      - run: ./result/bin/gitwhy version

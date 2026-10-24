@@ -4,5 +4,6 @@
 /npm/node_modules/
 /npm/LICENSE
 /npm/README.md
+/npm/THIRD_PARTY_LICENSES
 /npm/*.tgz
 .env

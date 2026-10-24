@@ -1,0 +1,41 @@
+# Dependabot keeps dependencies and pinned GitHub Actions current.
+#
+# Each ecosystem gets one grouped pull request a week, so updates arrive as a small batch instead of
+# a stream. Commit messages follow Conventional Commits (the repository's convention). GitHub Actions
+# updates matter most here: every action is pinned to a full commit SHA, and Dependabot is what moves
+# those pins forward (it also updates the version in the trailing comment).
+version: 2
+updates:
+  # Go modules (go.mod / go.sum). If go.mod or go.sum changes, flake.nix's vendorHash goes stale and
+  # the Nix build in CI fails: refresh it as CONTRIBUTING.md describes.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  # The npm package under npm/ (it has no dependencies today, so this mostly stays quiet).
+  - package-ecosystem: npm
+    directory: /npm
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      npm-dependencies:
+        patterns: ["*"]
+
+  # Actions used in .github/workflows/.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns: ["*"]

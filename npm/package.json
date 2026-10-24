@@ -9,6 +9,6 @@
   "keywords": ["git", "cli", "undo", "tui"],
   "bin": { "gitwhy": "bin/gitwhy.js" },
   "scripts": { "postinstall": "node install.js", "test": "node --test lib.test.js" },
-  "files": ["bin", "lib.js", "install.js", "README.md", "LICENSE"],
+  "files": ["bin", "lib.js", "install.js", "README.md", "LICENSE", "THIRD_PARTY_LICENSES"],
   "engines": { "node": ">=18" }
 }
