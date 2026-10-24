@@ -141,15 +141,9 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 
 	// Parents pin every local branch tip, HEAD and stash commit, so gc can't delete them.
 	args := []string{"commit-tree", tree, "-m", "gitwhy snapshot: " + label}
-	seen := map[string]bool{}
-	pin := func(id string) {
-		if id != "" && !seen[id] && r.OK("cat-file", "-e", id+"^{commit}") {
-			seen[id] = true
-			args = append(args, "-p", id)
-		}
-	}
+	var ids []string
 	if !strings.HasPrefix(s.Head, "ref: ") {
-		pin(s.Head)
+		ids = append(ids, s.Head)
 	}
 	names := make([]string, 0, len(s.Refs))
 	for n := range s.Refs {
@@ -158,11 +152,19 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	sort.Strings(names)
 	for _, n := range names {
 		if strings.HasPrefix(n, "refs/heads/") {
-			pin(s.Refs[n])
+			ids = append(ids, s.Refs[n])
 		}
 	}
 	for _, st := range s.Stashes {
-		pin(st.Commit)
+		ids = append(ids, st.Commit)
+	}
+	types := objectTypes(r, ids)
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if !seen[id] && types[id] == "commit" {
+			seen[id] = true
+			args = append(args, "-p", id)
+		}
 	}
 	s.Work, err = r.With(commitEnv...).Output(args...)
 	if err != nil {
@@ -477,6 +479,22 @@ func missingObjects(r *git.Repo, s *Snapshot) map[string]bool {
 	for _, line := range strings.Split(out, "\n") {
 		if id, ok := strings.CutSuffix(line, " missing"); ok {
 			m[id] = true
+		}
+	}
+	return m
+}
+
+// objectTypes returns the type of each object ("commit", "tag", ...) with one git process.
+// Missing objects are left out.
+func objectTypes(r *git.Repo, ids []string) map[string]string {
+	m := map[string]string{}
+	if len(ids) == 0 {
+		return m
+	}
+	out, _ := r.OutputIn(strings.NewReader(strings.Join(ids, "\n")+"\n"), "cat-file", "--batch-check=%(objectname) %(objecttype)")
+	for _, line := range strings.Split(out, "\n") {
+		if id, typ, ok := strings.Cut(line, " "); ok && typ != "missing" {
+			m[id] = typ
 		}
 	}
 	return m

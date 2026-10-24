@@ -1,10 +1,13 @@
 package snapshot
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dpologdvinity/gitwhy/internal/git"
 
@@ -363,5 +366,43 @@ func TestAutoCRLFRoundTrip(t *testing.T) {
 	}
 	if got := r.Read("b.txt"); got != "new\r\n" {
 		t.Fatalf("b.txt = %q", got)
+	}
+}
+
+// manyBranches makes n branches, each on its own commit, with one fast-import process.
+func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
+	t.Helper()
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "commit refs/heads/b%d\ncommitter T <t@t> %d +0000\ndata 2\nc\n", i, 1000000+i)
+		if i == 0 {
+			b.WriteString("from refs/heads/main\n")
+		} else {
+			fmt.Fprintf(&b, "from refs/heads/b%d\n", i-1)
+		}
+		fmt.Fprintf(&b, "M 644 inline f\ndata %d\n%d\n\n", len(strconv.Itoa(i))+1, i)
+	}
+	if out, err := r.OutputIn(strings.NewReader(b.String()), "fast-import", "--quiet"); err != nil {
+		t.Fatal(out, err)
+	}
+}
+
+// TestTakeManyBranchesIsFast proves Take checks branch tips in one git process: with hundreds
+// of branches it used to start one process per branch and take tens of seconds.
+func TestTakeManyBranchesIsFast(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	manyBranches(t, r, 400)
+	start := time.Now()
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 8*time.Second {
+		t.Errorf("Take took %s with 400 branches", d)
+	}
+	parents := strings.Fields(r.Git("log", "-1", "--format=%P", s.Work))
+	if len(parents) != 401 {
+		t.Errorf("work commit has %d parents, want 401 (every branch tip)", len(parents))
 	}
 }
