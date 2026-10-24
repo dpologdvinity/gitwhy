@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
@@ -55,6 +56,67 @@ func TestCustomCommentChar(t *testing.T) {
 	}
 }
 
+// TestPlanRemovedAfterRebase is a regression test: the temp directory Write makes must be gone once
+// git has run the plan, including a reword whose message is needed after the editor exits.
+func TestPlanRemovedAfterRebase(t *testing.T) {
+	tmp := t.TempDir()
+	setTempDir(t, tmp)
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	two := r.Commit("two", "b.txt", "2\n")
+	r.Commit("three", "c.txt", "3\n")
+	msg := "two, 'quoted' $HOME `x` 100%\n\nbody line\\n"
+	if err := rebase(t, r, Plan{Edits: []Item{{Action: "reword", Commit: two, Message: msg}}}, "rebase", "-i", "HEAD~2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("log", "-1", "--format=%B", "HEAD~1"); got != msg {
+		t.Fatalf("reworded message = %q, want %q", got, msg)
+	}
+	if left, _ := filepath.Glob(filepath.Join(tmp, "gitwhy-todo-*")); len(left) != 0 {
+		t.Fatalf("left behind: %v", left)
+	}
+}
+
+// TestWriteRemovesStaleDirs proves that Write deletes gitwhy-todo-* directories older than a day
+// (plans that were written but never run) and leaves recent ones and other files alone.
+func TestWriteRemovesStaleDirs(t *testing.T) {
+	tmp := t.TempDir()
+	setTempDir(t, tmp)
+	old := filepath.Join(tmp, "gitwhy-todo-old")
+	recent := filepath.Join(tmp, "gitwhy-todo-recent")
+	other := filepath.Join(tmp, "other-old")
+	for _, d := range []string{old, recent, other} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	twoDays := time.Now().Add(-48 * time.Hour)
+	for _, d := range []string{old, other} {
+		if err := os.Chtimes(d, twoDays, twoDays); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Write(Plan{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("stale dir kept: %v", err)
+	}
+	for _, d := range []string{recent, other} {
+		if _, err := os.Stat(d); err != nil {
+			t.Errorf("%s removed: %v", d, err)
+		}
+	}
+}
+
+// setTempDir points os.TempDir at dir for one test, on Unix and Windows.
+func setTempDir(t *testing.T, dir string) {
+	t.Helper()
+	for _, v := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(v, dir)
+	}
+}
+
 const sample = `pick 1111111 one
 pick 2222222 two
 pick 3333333 three
@@ -79,7 +141,7 @@ func run(t *testing.T, p Plan) string {
 
 func TestEdits(t *testing.T) {
 	got := run(t, Plan{Edits: []Item{{Action: "drop", Commit: "2222222abcdef"}, {Action: "reword", Commit: "3333333ffff", Message: "new msg"}}})
-	if !strings.Contains(got, "pick 1111111 one\ndrop 2222222 two\npick 3333333 three\nexec git commit --amend") {
+	if !strings.Contains(got, "pick 1111111 one\ndrop 2222222 two\npick 3333333 three\nexec printf '%s\\n' 'new msg' | git commit --amend") {
 		t.Fatalf("got:\n%s", got)
 	}
 }
