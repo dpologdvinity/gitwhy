@@ -1,3 +1,7 @@
+# Merges another branch into the current one: normally, always with a merge commit (--no-ff), only
+# as a fast-forward (--ff-only), or squashed into one new commit. A squash merge stages the changes
+# without committing, so a separate commit step follows with your message. --no-edit keeps git's
+# merge message without opening an editor. git may stop with conflicts. gitwhy undo goes back.
 title: Merge another branch into mine
 aliases: [merge, merge branch, combine branches, bring in changes from branch, merge master into my branch]
 category: merge & conflicts

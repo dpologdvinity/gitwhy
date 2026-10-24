@@ -1,3 +1,7 @@
+# Removes one commit from the current branch's history with an interactive rebase. No editor opens:
+# gitwhy edits the rebase todo list itself to drop that commit. The rebase starts at the commit's
+# parent ({{.commit_base}}, filled in by gitwhy); --autostash keeps uncommitted changes and
+# --rebase-merges keeps merge commits. Later commits may conflict. gitwhy undo puts the old history back.
 title: Remove a commit from history
 aliases: [delete commit, drop commit, remove past commit, erase commit, rewrite history remove commit]
 category: rewrite history

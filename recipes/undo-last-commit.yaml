@@ -1,3 +1,7 @@
+# Removes the last commit from the current branch with "reset HEAD~1". Its changes stay staged
+# (--soft), stay in your files unstaged (--mixed), or are deleted with all uncommitted changes
+# (--hard). A pushed commit gets a warning that suggests revert-commit instead. gitwhy undo brings
+# the commit and any deleted changes back.
 title: Undo last commit
 aliases: [uncommit, take back commit, remove last commit, undo commit keep changes, undo commit delete changes, reset last commit]
 category: undo

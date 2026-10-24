@@ -1,3 +1,6 @@
+# Saves uncommitted changes in a stash, optionally with untracked files, and resets your files to
+# the last commit. The message argument starts with "{{if", so it is left out when you give no note.
+# Bring the changes back with stash-restore; gitwhy undo also goes back.
 title: Set my changes aside (stash)
 aliases: [stash, save changes for later, shelve, put away changes, git stash]
 category: stash

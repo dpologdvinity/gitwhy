@@ -1,3 +1,7 @@
+# Continues the merge, rebase, cherry-pick or revert in progress once all conflicts are resolved.
+# gitwhy fills in {{.op}} from the operation it finds. Bisect can't be continued, so that case stops
+# before anything runs. GIT_EDITOR=true accepts git's prepared commit message instead of opening
+# an editor. gitwhy undo goes back to the state before continuing.
 title: Continue after fixing conflicts
 aliases: [continue, rebase --continue, merge --continue, cherry-pick --continue, keep going]
 category: merge & conflicts

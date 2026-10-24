@@ -1,3 +1,5 @@
+# Shows every commit that changed one tracked file, with its diff; --follow keeps going across
+# renames. Read only: nothing changes, so there is nothing to undo.
 title: See the history of one file
 aliases: [file history, who changed this file, log file, follow file, file changes over time]
 category: inspect history

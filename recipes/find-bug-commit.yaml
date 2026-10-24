@@ -1,3 +1,7 @@
+# Finds the first commit where your test command fails, using git bisect: HEAD is the bad end and
+# the commit you pick is the good end. "bisect run" runs the command through "sh -c" so you can
+# type it like in a terminal; exit code 0 means good. The last step ends the bisect and returns
+# you to where you started. Your branches and files don't change.
 title: Find which commit broke something (bisect)
 aliases: [bisect, find bug, which commit broke, regression, git bisect]
 category: inspect history

@@ -1,3 +1,5 @@
+# Sets up and checks out every submodule, and submodules inside them (--init --recursive), at the
+# commit this repository records. Commits inside submodules are kept but their checkout moves.
 title: Download or update submodules
 aliases: [submodule, submodules empty, init submodules, update submodules, submodule folder empty]
 category: monorepo

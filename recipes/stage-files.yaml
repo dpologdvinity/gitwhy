@@ -1,3 +1,6 @@
+# Stages the picked changed files for the next commit. "-A" stages deletions too, and "--" keeps
+# file names that start with a dash from being read as options. Staging is always reversible
+# (see unstage-files).
 title: Stage files for the next commit
 aliases: [add, git add, stage, add files]
 category: files

@@ -1,3 +1,7 @@
+# Switches to another branch. If you pick a remote branch such as origin/feat with no local branch
+# of that name, gitwhy fills in {{.target_track}} and a local branch {{.target_local}} is made to
+# track it, since switching to a remote branch directly would fail. Uncommitted changes come along.
+# gitwhy undo switches back.
 title: Switch to another branch
 aliases: [checkout branch, change branch, go to branch, switch]
 category: branches

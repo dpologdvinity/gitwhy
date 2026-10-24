@@ -1,3 +1,7 @@
+# Moves your last commits, from the one you pick onward, to a new branch: the new branch is made at
+# the current commit, then the current branch is moved back to just before the picked commit.
+# "reset --keep" keeps uncommitted changes and stops if they would be overwritten. The first commit
+# has no parent to go back to, so it is refused. gitwhy undo puts both branches back.
 title: Move my last commits to a new branch
 aliases: [committed to wrong branch, move commits to new branch, oops committed on master, take commits off master]
 category: branches

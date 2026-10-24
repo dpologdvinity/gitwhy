@@ -1,3 +1,7 @@
+# Adds a remote (a name such as origin for a URL) and, if you say yes, fetches its branches.
+# The fetch only adds remote-tracking branches; your branches and files don't change.
+# The remote itself is saved in the repository config, which snapshots don't cover, so gitwhy
+# undo does not remove it ("git remote remove <name>" does).
 title: Connect to a remote repository (add a remote)
 aliases: [add remote, add origin, connect github, remote add, new remote, upstream remote]
 category: sync with remote

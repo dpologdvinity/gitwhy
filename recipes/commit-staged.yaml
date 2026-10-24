@@ -1,5 +1,6 @@
 # Commits exactly what is staged, as it is. There is no "git add" and no file list, so hunks and
 # lines staged one by one stay as staged and unstaged edits stay out of the commit.
+# gitwhy undo removes the commit and leaves the changes staged again.
 title: Commit what is staged
 aliases: [commit staged, commit staged changes, commit index, commit only staged, commit what i staged]
 category: commits

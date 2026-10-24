@@ -1,3 +1,7 @@
+# Makes new and changed files that match a pattern go into Git LFS from now on. It sets up LFS for
+# your user, adds the pattern to .gitattributes and stages that file; you still need to commit it.
+# Files already committed don't change (see lfs-migrate). gitwhy undo puts .gitattributes back but
+# not the user-level LFS setup.
 title: Store big files with Git LFS
 aliases: [lfs, large files, git lfs track, big files, binary files, lfs setup]
 category: LFS

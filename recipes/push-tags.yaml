@@ -1,3 +1,6 @@
+# Uploads every local tag that isn't on {{.remote}} yet (the current branch's remote, or origin).
+# Without --force, tags that already exist on the remote are left as they are. A push can't be
+# undone with gitwhy undo.
 title: Push my tags
 aliases: [push tags, upload tags, publish tags]
 category: sync with remote

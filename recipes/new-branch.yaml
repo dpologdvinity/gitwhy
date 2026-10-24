@@ -1,3 +1,5 @@
+# Creates a new branch starting at the branch you pick (the current one by default) and switches
+# to it. Uncommitted changes come along. gitwhy undo deletes the new branch and switches back.
 title: Create a new branch
 aliases: [new branch, create branch, start branch, checkout -b, switch -c]
 category: branches

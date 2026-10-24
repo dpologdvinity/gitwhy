@@ -1,3 +1,8 @@
+# Deletes files git doesn't track: all of them ("-fd", or "-fdx" to include ignored files), or only
+# the files the TUI passes in as a preset "files" answer, in which case "Delete what?" is skipped.
+# The second "when" is "{{if .files}}true{{end}}" because a list renders as text like "[]", which
+# would count as true even when the list is empty.
+# gitwhy saves untracked files, and the ignored files about to go, so gitwhy undo can bring them back.
 title: Delete untracked files
 aliases: [clean, git clean, remove untracked files, delete new files]
 category: files

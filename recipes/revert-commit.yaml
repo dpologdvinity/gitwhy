@@ -1,3 +1,6 @@
+# Adds a new commit that reverses an old one, without rewriting history, so it is safe for commits
+# already pushed. --no-edit keeps git's "Revert ..." message without opening an editor. git may
+# stop with conflicts. gitwhy undo removes the new commit.
 title: Undo a commit with a new commit (safe for pushed commits)
 aliases: [revert, undo pushed commit, reverse commit, cancel commit]
 category: undo

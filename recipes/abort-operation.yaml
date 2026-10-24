@@ -1,3 +1,7 @@
+# Cancels the merge, rebase, cherry-pick, revert or "git am" in progress, back to how things were
+# before it started. gitwhy fills in {{.op}} from the operation it finds, so the step becomes
+# "git <op> --abort". Bisect has no --abort, so it is ended with "git bisect reset" instead.
+# A snapshot is taken first, so gitwhy undo can bring back the conflict fixes this throws away.
 title: Cancel the merge / rebase / cherry-pick in progress
 aliases: [abort, cancel merge, cancel rebase, stop rebase, get out of merge, abort rebase, abort merge]
 category: merge & conflicts

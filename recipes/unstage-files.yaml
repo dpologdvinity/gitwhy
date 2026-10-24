@@ -1,3 +1,6 @@
+# Unstages the picked files ("restore --staged"); your edits stay in the files. This is the safe
+# meaning of "reset file" (see TestSafeRecipeFirst in internal/search). Staging is always
+# reversible (see stage-files).
 title: Unstage files
 aliases: [unstage, remove from staging, undo git add, reset file]
 category: files

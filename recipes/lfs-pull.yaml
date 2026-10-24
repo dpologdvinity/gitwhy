@@ -1,3 +1,6 @@
+# Downloads the real content of LFS files when you only see small pointer files. "lfs install"
+# first sets up the LFS hooks and filters (safe to repeat); it changes your user git config, which
+# gitwhy undo does not cover. "lfs pull" then replaces the pointers in your files.
 title: Download the real LFS files (I only see small pointer files)
 aliases: [lfs pull, lfs files missing, pointer files, download lfs]
 category: LFS

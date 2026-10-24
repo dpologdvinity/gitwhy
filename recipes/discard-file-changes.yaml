@@ -1,3 +1,6 @@
+# Throws away unstaged edits to the picked files; each file goes back to its staged version, or to
+# the last commit if nothing is staged. Staged changes are kept. The snapshot saves the edits
+# first, so gitwhy undo can bring them back.
 title: Throw away changes to files
 aliases: [discard changes, revert file, undo file changes, checkout file, restore file]
 category: files

@@ -1,3 +1,5 @@
+# Renames or moves a tracked file with "git mv" and stages the rename for the next commit.
+# Nothing is committed. gitwhy undo puts the file back under its old name.
 title: Rename or move a file
 aliases: [rename file, move file, git mv]
 category: files

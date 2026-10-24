@@ -1,3 +1,6 @@
+# Searches every branch for commits whose message contains some words (--grep, ignoring case), or
+# whose changes added or removed some text (-S, the "pickaxe"). The search text is glued to its
+# flag so it stays one argument. Read only: nothing changes, so there is nothing to undo.
 title: Find a commit by its message or change
 aliases: [search commits, find commit, grep log, which commit added, pickaxe, search history]
 category: inspect history

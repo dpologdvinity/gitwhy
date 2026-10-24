@@ -1,3 +1,7 @@
+# Makes a local branch exactly match its upstream ("<branch>@{upstream}") after a fetch. For the
+# current branch it uses "reset" (--keep or --hard, asked only then); for another branch it moves
+# the branch with "branch -f", which doesn't touch your files. Local-only commits leave the
+# branch; gitwhy undo brings them back.
 title: Make a branch exactly match the remote (like master = origin/master)
 aliases: [make branch same as remote, make master same as remote, reset to origin, discard local commits, match remote branch, force sync]
 category: sync with remote

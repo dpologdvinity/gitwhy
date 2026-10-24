@@ -1,3 +1,6 @@
+# Deletes a worktree folder and git's record of it. git refuses if the folder has uncommitted or
+# untracked changes; ignored files in it are deleted. Its branch stays. Snapshots cover only the
+# folder you run gitwhy in, so gitwhy undo can't bring the removed folder's files back.
 title: Remove a worktree folder
 aliases: [remove worktree, delete worktree, worktree remove]
 category: monorepo

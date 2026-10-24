@@ -1,3 +1,6 @@
+# Uploads the current branch to {{.remote}} (its remote, or origin) and sets it to track it (-u).
+# The safe force uses --force-with-lease plus --force-if-includes, so it refuses if someone pushed
+# commits you haven't fetched and looked at. A push can't be undone with gitwhy undo.
 title: Push my branch
 aliases: [push, upload, publish branch, push new branch, force push]
 category: sync with remote

@@ -1,3 +1,7 @@
+# Adds the picked file changes to an older commit: it makes a "fixup!" commit, then an
+# --autosquash rebase folds it into the chosen commit. GIT_SEQUENCE_EDITOR=true accepts the todo
+# list git prepared, so no editor opens. {{.files_from}} adds the old path of any staged rename.
+# The chosen commit and every later one get new IDs; gitwhy undo puts the old history back.
 title: Add changes to an older commit
 aliases: [rewrite past commit, edit old commit, amend older commit, fixup, change past commit, add file to old commit]
 category: rewrite history

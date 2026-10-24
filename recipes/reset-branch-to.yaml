@@ -1,3 +1,6 @@
+# Moves the current branch to the same commit as another branch, optionally fetching first.
+# "--keep" keeps uncommitted changes and stops if they would be overwritten; "--hard" deletes them.
+# Commits only on your branch leave it; gitwhy undo (or recover) brings them back.
 title: Make my branch the same as another branch (like master)
 aliases: [make branch same as master, reset branch to master, match master, start over from master, reset to branch]
 category: branches

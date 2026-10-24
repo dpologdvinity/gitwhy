@@ -1,3 +1,5 @@
+# Shows the last 40 commits of a branch (the current one by default) as a one-line graph with
+# branch and tag names. Read only: nothing changes.
 title: See recent commits
 aliases: [log, history, what changed, recent commits, git log, commit graph]
 category: inspect history

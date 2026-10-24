@@ -1,3 +1,7 @@
+# Stages the picked changed files (deletions included, "add -A") and commits only those files.
+# Other staged files stay staged but out of this commit, because the commit is limited to paths.
+# {{.files_from}} is filled in by gitwhy with the old path of any picked staged rename, so the
+# commit records the whole rename. gitwhy undo removes the commit again.
 title: Commit my changes
 aliases: [commit, save changes, git commit]
 category: commits

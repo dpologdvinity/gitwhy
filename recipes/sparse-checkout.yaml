@@ -1,3 +1,7 @@
+# Keeps only the folders you list (plus top-level files) on disk, using cone-mode sparse checkout.
+# The answer is split on spaces ("split: true") so each folder is its own argument. Other folders
+# leave your disk but stay in git. Snapshots save the sparse-checkout settings, so gitwhy undo can
+# go back.
 title: Only check out some folders (sparse checkout)
 aliases: [sparse checkout, only some folders, monorepo subset, partial checkout]
 category: monorepo

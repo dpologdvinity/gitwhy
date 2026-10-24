@@ -1,3 +1,6 @@
+# Downloads new commits from every remote and updates remote-tracking branches such as
+# origin/master; --prune removes ones whose branch was deleted on the remote. Your own branches
+# and files don't change. gitwhy undo puts the remote-tracking branches back.
 title: See what's new on the remote (without changing my files)
 aliases: [fetch, download without merging, check remote, update remote branches]
 category: sync with remote

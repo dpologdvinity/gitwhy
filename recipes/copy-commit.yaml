@@ -1,3 +1,6 @@
+# Copies one commit from another branch onto the current branch (cherry-pick); the original stays.
+# The commit picker lists only commits on that branch that aren't already in HEAD ("HEAD..from").
+# git may stop with conflicts; resolve them, then continue or abort. gitwhy undo removes the copy.
 title: Copy a commit from another branch
 aliases: [cherry-pick, copy commit, bring commit over, apply commit from branch]
 category: branches
