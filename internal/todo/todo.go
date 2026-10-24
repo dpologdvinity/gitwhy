@@ -63,11 +63,13 @@ func Editor(self, plan string) string {
 	return "GIT_SEQUENCE_EDITOR=" + quote(self) + " __todo " + quote(plan)
 }
 
+// quote wraps s in single quotes for the POSIX shell that git runs editors and exec steps in.
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// line is one line of the todo file.
 type line struct {
-	text   string
-	action string
+	text   string // the line as written
+	action string // its todo command ("pick", "p", "exec", ...); "" for comments and blank lines
 	commit string // abbreviated ID as written
 	rest   string // subject
 }
@@ -81,9 +83,12 @@ var commands = map[string]bool{
 	"noop": true,
 }
 
+// isPick reports whether todo command a is pick, long or short.
 func isPick(a string) bool { return a == "pick" || a == "p" }
 
-// Apply rewrites the todo file at todoPath according to the plan at planPath.
+// Apply rewrites the todo file at todoPath according to the plan at planPath. With Full, the
+// pick lines are replaced in the plan's order and any other step makes it refuse; with Edits,
+// only the matching pick lines change. It deletes the plan once read.
 func Apply(planPath, todoPath string) error {
 	data, err := os.ReadFile(planPath)
 	if err != nil {

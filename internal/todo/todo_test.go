@@ -117,6 +117,7 @@ func setTempDir(t *testing.T, dir string) {
 	}
 }
 
+// sample is a todo file like the one git writes for three commits.
 const sample = `pick 1111111 one
 pick 2222222 two
 pick 3333333 three
@@ -124,6 +125,7 @@ pick 3333333 three
 # Rebase ...
 `
 
+// run applies plan p to a copy of sample and returns the rewritten todo.
 func run(t *testing.T, p Plan) string {
 	t.Helper()
 	plan, err := Write(p)
@@ -139,6 +141,8 @@ func run(t *testing.T, p Plan) string {
 	return string(data)
 }
 
+// TestEdits proves that an Edits plan changes only the matching lines, and that a reword adds an
+// exec step that sets the new message.
 func TestEdits(t *testing.T) {
 	got := run(t, Plan{Edits: []Item{{Action: "drop", Commit: "2222222abcdef"}, {Action: "reword", Commit: "3333333ffff", Message: "new msg"}}})
 	if !strings.Contains(got, "pick 1111111 one\ndrop 2222222 two\npick 3333333 three\nexec printf '%s\\n' 'new msg' | git commit --amend") {
@@ -146,6 +150,7 @@ func TestEdits(t *testing.T) {
 	}
 }
 
+// TestFullReorder proves that a Full plan rewrites the pick lines in the plan's order and actions.
 func TestFullReorder(t *testing.T) {
 	got := run(t, Plan{Full: []Item{{"pick", "3333333x", ""}, {"pick", "1111111x", ""}, {"fixup", "2222222x", ""}}})
 	if !strings.HasPrefix(got, "pick 3333333 three\npick 1111111 one\nfixup 2222222 two\n") {
@@ -153,6 +158,7 @@ func TestFullReorder(t *testing.T) {
 	}
 }
 
+// TestMismatchFails proves that a Full plan with fewer commits than the rebase is refused.
 func TestMismatchFails(t *testing.T) {
 	plan, _ := Write(Plan{Full: []Item{{"pick", "1111111x", ""}}})
 	todo := filepath.Join(t.TempDir(), "todo")
@@ -162,6 +168,8 @@ func TestMismatchFails(t *testing.T) {
 	}
 }
 
+// TestFullRefusesUpdateRef proves that a Full plan refuses a todo with non-pick steps such as
+// update-ref, which reordering would break.
 func TestFullRefusesUpdateRef(t *testing.T) {
 	plan, _ := Write(Plan{Full: []Item{{"pick", "1111111x", ""}}})
 	todo := filepath.Join(t.TempDir(), "todo")
