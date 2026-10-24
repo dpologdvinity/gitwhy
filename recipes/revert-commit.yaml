@@ -8,5 +8,10 @@ explain: Makes a new commit that reverses the old one. History is not rewritten,
 questions:
   - {id: commit, ask: "Which commit to reverse?", type: commit, source: HEAD}
 steps:
-  - git: [revert, --no-edit, "{{.commit}}"]
+  # A merge commit has two parents; git needs to know which side to keep. Parent 1 is the branch
+  # that was merged into, which is what "undo this merge" means in nearly every case.
+  - when: "{{.commit_merge}}"
+    git: [revert, --no-edit, -m, "1", "{{.commit}}"]
+  - when: "{{if .commit_merge}}{{else}}1{{end}}"
+    git: [revert, --no-edit, "{{.commit}}"]
 predict: A new commit on {{.branch}} reverses the changes of {{.commit}}. History stays as it is.

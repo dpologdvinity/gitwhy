@@ -7,7 +7,7 @@ category: branches
 checks:
   - {if: detached-head, block: "You're not on a branch."}
 questions:
-  - {id: target, ask: "Make it the same as which branch?", type: branch, source: all, default: origin/master}
+  - {id: target, ask: "Make it the same as which branch?", type: branch, source: all, default: "{{.default_branch}}"}
   - id: mode
     ask: Your uncommitted changes?
     type: choice

@@ -9,7 +9,7 @@ checks:
   - {if: in-progress-op, block: "Finish or abort the current operation first.", suggest: abort-operation}
   - {if: detached-head, block: "You're not on a branch."}
 questions:
-  - {id: base, ask: "Update from which branch?", type: branch, source: remote, default: origin/master}
+  - {id: base, ask: "Update from which branch?", type: branch, source: remote, default: "{{.default_branch}}"}
   - id: how
     ask: How?
     type: choice
