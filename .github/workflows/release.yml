@@ -1,50 +1,87 @@
+# Release: publishes gitwhy when a version tag (v*) is pushed.
+#
+# Stages, in order:
+#   ci       - the full quality gates from ci.yml (lint, tests, build); nothing is published unless
+#              they pass
+#   release  - goreleaser builds and publishes the GitHub release, the Homebrew cask and Scoop
+#              manifest, and (with a token) opens the winget PR
+#   repos    - builds the signed apt and dnf repositories from the release packages and pushes
+#              them to the gh-pages branch (served by GitHub Pages)
+#   npm      - publishes the @kaitlynbassford/gitwhy package, which downloads the release binary
+#
+# verify-install.yml then installs the new release every supported way. Required secrets are
+# listed in CONTRIBUTING.md under "Releasing".
 name: release
+
 on:
   push:
     tags: ["v*"]
+
+# Least privilege by default; the jobs that must write ask for it themselves.
 permissions:
-  contents: write
+  contents: read
+
+# Releases run one at a time and are never cancelled half way: a cancelled release would leave
+# the GitHub release, the package repositories and npm out of step.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  GORELEASER_VERSION: v2.19.0
+  # The Go minor release to build and test with. go.mod only sets the minimum (the first release with
+  # the fixes we need); CI always uses the newest patch of this minor release.
+  GO_VERSION: "1.26"
+
 jobs:
+  # The same checks every pull request passes.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # creates the GitHub release and uploads its files
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
+          fetch-depth: 0 # goreleaser reads tags and history for versions and the changelog
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
-      - uses: goreleaser/goreleaser-action@v7
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true # newest patch of that minor release: it carries the newest security fixes
+          cache: true
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: "~> v2"
+          version: ${{ env.GORELEASER_VERSION }}
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Push the Homebrew cask and Scoop manifest to dpologdvinity/homebrew-gitwhy.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Optional: without it the winget step is skipped.
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-  npm:
-    needs: release # the package downloads these release assets
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-      - run: cp LICENSE README.md npm/
-      - run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
-        working-directory: npm
-      - run: npm publish --access public
-        working-directory: npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Builds the apt and dnf repositories from the release's .deb and .rpm files and publishes them
+  # to the gh-pages branch.
   repos:
-    needs: release # builds the apt and dnf repos from the release's .deb and .rpm files
+    needs: release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # pushes the gh-pages branch
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install repo tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c gnupg
+      # The token is only in the clone URL of the site folder, never in this repository's config.
       - name: Check out the site branch (gh-pages)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -66,7 +103,8 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
-          export GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')
+          GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')
+          export GPG_KEY_ID
           scripts/build-repos.sh pkgs site
           touch site/.nojekyll
       - name: Publish
@@ -77,3 +115,27 @@ jobs:
           git add -A
           git commit -m "repos: ${GITHUB_REF_NAME}"
           git push origin gh-pages
+
+  # Publishes the npm package. It downloads the release binary, so it runs after the release.
+  npm:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # lets npm record where the package was built (provenance)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: cp LICENSE THIRD_PARTY_LICENSES README.md npm/
+      - run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+        working-directory: npm
+      - run: npm publish --access public --provenance
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
