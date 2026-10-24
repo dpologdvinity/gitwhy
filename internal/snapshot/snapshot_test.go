@@ -369,6 +369,32 @@ func TestAutoCRLFRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRestoreManyHiddenFilesIsFast proves restore brings back files hidden by a sparse
+// checkout with a fixed number of git processes: it used to start one per file.
+func TestRestoreManyHiddenFilesIsFast(t *testing.T) {
+	r := testrepo.New(t)
+	r.Write("d1/x", "x\n")
+	for i := 0; i < 400; i++ {
+		r.Write(fmt.Sprintf("d2/f%d", i), "y\n")
+	}
+	r.Commit("one")
+	s, err := Take(r.Repo, "sparse", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("sparse-checkout", "set", "--cone", "d1")
+	start := time.Now()
+	if _, err := Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 8*time.Second {
+		t.Errorf("Restore took %s for 400 hidden files", d)
+	}
+	if r.Read("d2/f399") != "y\n" {
+		t.Fatalf("d2/f399 = %q", r.Read("d2/f399"))
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()

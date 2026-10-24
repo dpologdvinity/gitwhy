@@ -648,9 +648,17 @@ func restoreMissing(r *git.Repo, s *Snapshot) error {
 	if err != nil || out == "" {
 		return nil
 	}
+	saved, err := r.Output("ls-tree", "-r", "-z", "--name-only", s.Work)
+	if err != nil {
+		return err
+	}
+	inWork := map[string]bool{}
+	for _, p := range strings.Split(saved, "\x00") {
+		inWork[p] = true
+	}
 	var paths []string
 	for _, p := range strings.Split(out, "\x00") {
-		if p != "" && r.OK("cat-file", "-e", s.Work+":"+p) {
+		if p != "" && inWork[p] {
 			paths = append(paths, p)
 		}
 	}
