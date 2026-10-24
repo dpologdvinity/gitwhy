@@ -59,6 +59,26 @@ func TestConflictAndOperationShown(t *testing.T) {
 	}
 }
 
+// TestCommitKeyCommitsTheIndex proves that c with staged files commits the index as it is
+// (commit-staged, no file list), so a partly staged file or a staged rename is committed exactly
+// as staged; with nothing staged it still offers commit-changes.
+func TestCommitKeyCommitsTheIndex(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "f.txt", "1\n2\n", "old.txt", "o\n")
+	r.Write("f.txt", "1 edited\n2\n")
+	m := &model{repo: r.Repo}
+	m.load()
+	if a, ok := m.tabKey("c", 0); !ok || a.Recipe != "commit-changes" || a.Preset != nil {
+		t.Fatalf("c with nothing staged = %+v", a)
+	}
+	r.Git("mv", "old.txt", "new.txt")
+	m.load()
+	a, ok := m.tabKey("c", 0)
+	if !ok || a.Kind != "recipe" || a.Recipe != "commit-staged" || a.Preset != nil {
+		t.Fatalf("c with a staged rename = %+v", a)
+	}
+}
+
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")

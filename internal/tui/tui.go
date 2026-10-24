@@ -372,14 +372,12 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			return run("stash-save", nil), true
 		}
 		if k == "c" {
-			var staged []string
 			for _, f := range m.files {
 				if f.staged() {
-					staged = append(staged, f.path)
+					// Commit the index as it is: a path list would also take unstaged hunks
+					// and turn a staged rename into a copy.
+					return run("commit-staged", nil), true
 				}
-			}
-			if len(staged) > 0 {
-				return run("commit-changes", recipe.Answers{"files": staged}), true
 			}
 			return run("commit-changes", nil), true
 		}
