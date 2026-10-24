@@ -261,3 +261,152 @@ func TestHookScriptOnlySpawnsGitwhyForRiskyCommands(t *testing.T) {
 		t.Fatalf("gitwhy was called with %v, want only __pre for reset", got)
 	}
 }
+
+// runShell runs body as a script in the given shell with a fake gitwhy on PATH (see fakeGitwhy),
+// starting in dir, and returns the shell's combined output and the fake gitwhy's call log.
+func runShell(t *testing.T, shell, dir, body string) (output, calls string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake gitwhy is a sh script; Git Bash PATH handling differs")
+	}
+	bin, err := exec.LookPath(shell)
+	if err != nil {
+		t.Skipf("no %s", shell)
+	}
+	path, log := fakeGitwhy(t)
+	script, err := Script(shell)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := filepath.Join(t.TempDir(), "t.sh")
+	if err := os.WriteFile(f, []byte(script+"\n"+body+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(bin, f)
+	c.Dir = dir
+	c.Env = append(os.Environ(), "PATH="+path, "HOME="+t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, _ := c.CombinedOutput()
+	data, _ := os.ReadFile(log)
+	return string(out), string(data)
+}
+
+// TestPreSnapshotsGlobalOptionForms checks that git's global options in front of the command do
+// not hide it from the hook: -C, --no-pager, -c and --git-dir forms all take a snapshot.
+func TestPreSnapshotsGlobalOptionForms(t *testing.T) {
+	forms := map[string][]string{
+		"-C .":       {"-C", ".", "reset", "--hard"},
+		"-C sub":     {"-C", "sub", "reset", "--hard"},
+		"--no-pager": {"--no-pager", "reset", "--hard"},
+		"-c k=v":     {"-c", "core.pager=cat", "reset", "--hard"},
+		"-P":         {"-P", "reset", "--hard"},
+		"no options": {"reset", "--hard"},
+	}
+	for name, args := range forms {
+		t.Run(name, func(t *testing.T) {
+			r := testrepo.New(t)
+			r.Commit("base", "f.txt", "1\n", "sub/g.txt", "g\n")
+			r.Write("f.txt", "dirty\n")
+			if id := Pre(r.Top, args); id == "" {
+				t.Fatalf("Pre(%v) took no snapshot", args)
+			}
+		})
+	}
+}
+
+// TestPreSkipsOptionsThatChangeTheRepository checks the documented limit: with --git-dir or
+// --work-tree the hook cannot tell which repository the command changes, so it takes no snapshot
+// rather than snapshotting the wrong one.
+func TestPreSkipsOptionsThatChangeTheRepository(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n")
+	r.Write("f.txt", "dirty\n")
+	for _, args := range [][]string{
+		{"--git-dir=.git", "reset", "--hard"},
+		{"--git-dir", ".git", "reset", "--hard"},
+		{"--work-tree=.", "reset", "--hard"},
+	} {
+		if id := Pre(r.Top, args); id != "" {
+			t.Errorf("Pre(%v) = %q, want no snapshot", args, id)
+		}
+	}
+}
+
+// TestPreResolvesSimpleAliases checks that a git alias for a risky command is treated as that
+// command, while shell aliases (starting with "!") and aliases for safe commands are not.
+func TestPreResolvesSimpleAliases(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n")
+	r.Git("config", "alias.rh", "reset --hard")
+	r.Git("config", "alias.st", "status")
+	r.Git("config", "alias.sh", "!sh -c 'git reset --hard'")
+	r.Write("f.txt", "dirty\n")
+	if id := Pre(r.Top, []string{"rh"}); id == "" {
+		t.Error("alias rh = reset --hard took no snapshot")
+	}
+	if id := Pre(r.Top, []string{"st"}); id != "" {
+		t.Errorf("alias st = status took snapshot %q", id)
+	}
+	if id := Pre(r.Top, []string{"sh"}); id != "" {
+		t.Errorf("shell alias took snapshot %q", id)
+	}
+}
+
+// TestHookFunctionSeesThroughGlobalOptionsAndAliases checks the generated shell function: global
+// options before the command, and unknown words (possible aliases), must reach `gitwhy __pre`,
+// while safe commands behind the same options must not.
+func TestHookFunctionSeesThroughGlobalOptionsAndAliases(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh"} {
+		t.Run(shell, func(t *testing.T) {
+			r := testrepo.New(t)
+			r.Commit("base", "f.txt", "1\n")
+			body := "git --no-pager reset --hard >/dev/null 2>&1\n" +
+				"git -C . reset --hard >/dev/null 2>&1\n" +
+				"git -c core.pager=cat reset --hard >/dev/null 2>&1\n" +
+				"git rh >/dev/null 2>&1\n" + // not a built-in: could be an alias, so ask gitwhy
+				"git --no-pager status >/dev/null 2>&1\n" +
+				"git -C . log -1 >/dev/null 2>&1\n" +
+				"git -c a=b diff >/dev/null 2>&1\n"
+			_, calls := runShell(t, shell, r.Top, body)
+			if got := len(strings.Fields(calls)); got != 4 {
+				t.Fatalf("%s: gitwhy was called %d times, want 4 (the three reset forms and the unknown word):\n%s", shell, got, calls)
+			}
+		})
+	}
+}
+
+// TestHookFunctionLoadsWhenGitIsAliased checks that defining the function works for people who
+// already alias git (alias git="git --no-pager", or hub): `git() {` is a parse error then.
+func TestHookFunctionLoadsWhenGitIsAliased(t *testing.T) {
+	cases := map[string]string{
+		"bash": "shopt -s expand_aliases\nalias git='git --no-pager'\n",
+		"zsh":  "alias git='git --no-pager'\n",
+	}
+	for shell, pre := range cases {
+		t.Run(shell, func(t *testing.T) {
+			bin, err := exec.LookPath(shell)
+			if err != nil {
+				t.Skipf("no %s", shell)
+			}
+			script, _ := Script(shell)
+			f := filepath.Join(t.TempDir(), "t.sh")
+			if err := os.WriteFile(f, []byte(pre+script+"\necho loaded\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			out, _ := exec.Command(bin, f).CombinedOutput()
+			if !strings.Contains(string(out), "loaded") || strings.Contains(string(out), "rror") {
+				t.Fatalf("%s: the function did not load:\n%s", shell, out)
+			}
+		})
+	}
+}
+
+// TestHookFunctionKeepsExitCodeUnderSetU checks that `set -u` (nounset) in bash does not turn a
+// successful git into "unbound variable" and exit status 127.
+func TestHookFunctionKeepsExitCodeUnderSetU(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n")
+	out, _ := runShell(t, "bash", r.Top, "set -u\ngit rev-parse --short HEAD >/dev/null\necho rc=$?\n")
+	if !strings.Contains(out, "rc=0") || strings.Contains(out, "unbound") {
+		t.Fatalf("under set -u:\n%s", out)
+	}
+}
