@@ -105,8 +105,20 @@ jobs:
     env:
       WANT: ${{ needs.latest.outputs.version }}
     steps:
-      - run: |
-          npm install -g @kaitlynbassford/gitwhy
+      # The registry can keep serving the previous version for a few minutes after a publish, so
+      # wait until it lists the new one (up to about 10 minutes) before installing.
+      - name: Wait for the new version to appear
+        run: |
+          for i in $(seq 1 30); do
+            if [ "$(npm view --prefer-online @kaitlynbassford/gitwhy version)" = "$WANT" ]; then exit 0; fi
+            echo "attempt $i: not published yet; waiting"
+            sleep 20
+          done
+          echo "@kaitlynbassford/gitwhy $WANT never appeared on the npm registry"
+          exit 1
+      - name: Install and check
+        run: |
+          npm install -g --prefer-online @kaitlynbassford/gitwhy
           gitwhy version | grep -F "$WANT"
 
   brew:
