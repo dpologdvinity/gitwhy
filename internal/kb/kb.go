@@ -125,6 +125,8 @@ func Load(fsys fs.FS) (*KB, error) {
 	return k, nil
 }
 
+// Patterns for Parse: codeRe finds `code` spans; sharedRe finds links to a shared options page
+// and captures its name ("diff-options").
 var (
 	codeRe   = regexp.MustCompile("`([^`]+)`")
 	sharedRe = regexp.MustCompile(`\]\((?:\.\./)?shared/([\w-]+)\.md`)
@@ -316,6 +318,7 @@ func parseFlag(cell, desc string) (Flag, bool) {
 	return f, true
 }
 
+// contains reports whether xs has x.
 func contains(xs []string, x string) bool {
 	for _, y := range xs {
 		if y == x {
