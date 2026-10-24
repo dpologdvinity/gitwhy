@@ -149,7 +149,7 @@ func (a *App) execute(j job) error {
 	warnings := extraWarn
 	seen := map[string]bool{}
 	for _, s := range steps {
-		for _, w := range danger.Warnings(s.args) {
+		for _, w := range danger.WarningsIn(where, s.args) {
 			if !seen[w] {
 				seen[w] = true
 				warnings = append(warnings, w)

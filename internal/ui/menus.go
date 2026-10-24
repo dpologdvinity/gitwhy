@@ -312,7 +312,7 @@ func (a *App) Explain(args []string) error {
 	a.Quiet = false
 	a.showCommand(args)
 	a.Quiet = quiet
-	for _, w := range dangerOf(args) {
+	for _, w := range dangerOf(a.Repo, args) {
 		warn(w)
 	}
 	return nil
@@ -454,7 +454,9 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
-func dangerOf(args []string) []string { return danger.Warnings(args) }
+// dangerOf returns the warnings for a command line. The repository (nil outside one) lets
+// "git checkout <file>" be told apart from "git checkout <branch>".
+func dangerOf(repo *git.Repo, args []string) []string { return danger.WarningsIn(repo, args) }
 
 func gitIn(dir string, args []string) error { return typed(git.Runner{Dir: dir}).Interactive(args...) }
 
