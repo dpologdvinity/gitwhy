@@ -35,13 +35,13 @@ func Preview(repo *git.Repo, args []string) Result {
 	case "add":
 		return dryRun(repo, args, "--dry-run", "add '", "will stage", false)
 	case "mv":
-		return dryRun(repo, args, "-n", "", "will move", false)
+		return dryRun(repo, args, "-n", "Renaming ", "will move", false)
 	case "merge":
 		if a.Has("--abort", "--continue", "--quit") {
 			return Result{}
 		}
 		if p := a.Positional(); len(p) == 1 {
-			return merge(repo, p[0], a.Has("--squash"))
+			return merge(repo, p[0], mergeOptionsOf(repo, a))
 		}
 	case "rebase":
 		if a.Has("--abort", "--continue", "--skip", "--quit", "--onto", "--root") {
@@ -186,22 +186,11 @@ func reset(repo *git.Repo, a danger.Args) Result {
 	return r
 }
 
-// dryRun runs the command itself with a dry-run flag and reports its output.
+// dryRun runs the command itself with a dry-run flag and reports its output. The user's flags are
+// passed through untouched (git lets -n win over -f, and a second -f changes what clean deletes).
+// Only lines that start with prefix are file lines; git's progress lines are skipped.
 func dryRun(repo *git.Repo, args []string, flag, prefix, verb string, isClean bool) Result {
-	var dry []string
-	for i, w := range args {
-		if i > 0 && isClean && strings.HasPrefix(w, "-") && !strings.HasPrefix(w, "--") {
-			w = strings.ReplaceAll(w, "f", "") // drop -f: -n must win
-			if w == "-" {
-				continue
-			}
-		}
-		if isClean && (w == "--force") {
-			continue
-		}
-		dry = append(dry, w)
-	}
-	dry = append(dry[:1], append([]string{flag}, dry[1:]...)...)
+	dry := append([]string{"-c", "core.quotePath=false", args[0], flag}, args[1:]...)
 	out, err := repo.Output(dry...)
 	if err != nil {
 		return Result{}
@@ -209,11 +198,15 @@ func dryRun(repo *git.Repo, args []string, flag, prefix, verb string, isClean bo
 	r := Result{Exact: true}
 	var files []string
 	for _, line := range strings.Split(out, "\n") {
-		if line == "" {
+		if !strings.HasPrefix(line, prefix) || line == "" {
 			continue
 		}
 		f := strings.TrimPrefix(line, prefix)
-		f = strings.TrimSuffix(f, "'")
+		if isClean {
+			f = unquote(f)
+		} else {
+			f = strings.TrimSuffix(f, "'")
+		}
 		files = append(files, f)
 	}
 	if len(files) == 0 {
@@ -222,9 +215,34 @@ func dryRun(repo *git.Repo, args []string, flag, prefix, verb string, isClean bo
 	}
 	listFiles(&r, "Files git "+verb, files)
 	if isClean {
-		r.Save = files
+		r.Save = fromRepoRoot(repo, files)
 	}
 	return r
+}
+
+// unquote undoes git's C-style quoting of a path ("q\"uote.txt"). Git quotes names with special
+// characters such as a double quote or a newline; other names are printed as they are.
+func unquote(s string) string {
+	if strings.HasPrefix(s, `"`) {
+		if u, err := strconv.Unquote(s); err == nil {
+			return u
+		}
+	}
+	return s
+}
+
+// fromRepoRoot turns paths that git printed relative to the folder it ran in into paths relative
+// to the repository root, which is where snapshot.Take reads them from.
+func fromRepoRoot(repo *git.Repo, files []string) []string {
+	prefix, err := repo.Output("rev-parse", "--show-prefix")
+	if err != nil || prefix == "" {
+		return files
+	}
+	out := make([]string, len(files))
+	for i, f := range files {
+		out[i] = prefix + f
+	}
+	return out
 }
 
 func mergeTree(repo *git.Repo, args ...string) (tree string, conflicts []string, err error) {
@@ -239,7 +257,30 @@ func mergeTree(repo *git.Repo, args ...string) (tree string, conflicts []string,
 	return lines[0], nil, nil
 }
 
-func merge(repo *git.Repo, from string, squash bool) Result {
+// mergeOptions are the merge flags that change what a merge does.
+type mergeOptions struct {
+	squash   bool // --squash: stage the changes, never commit or fast-forward
+	noFF     bool // --no-ff: always create a merge commit
+	ffOnly   bool // --ff-only: refuse unless the branch can fast-forward
+	noCommit bool // --no-commit: stage the merge but do not commit it
+}
+
+// mergeOptionsOf reads the merge flags from a command line. Without an explicit --ff, --no-ff or
+// --ff-only, git follows the merge.ff setting, so that is read too.
+func mergeOptionsOf(repo *git.Repo, a danger.Args) mergeOptions {
+	o := mergeOptions{squash: a.Has("--squash"), noFF: a.Has("--no-ff"), ffOnly: a.Has("--ff-only"), noCommit: a.Has("--no-commit")}
+	if !o.noFF && !o.ffOnly && !a.Has("--ff") {
+		switch cfg, _ := repo.Output("config", "--get", "merge.ff"); cfg {
+		case "false":
+			o.noFF = true
+		case "only":
+			o.ffOnly = true
+		}
+	}
+	return o
+}
+
+func merge(repo *git.Repo, from string, o mergeOptions) Result {
 	if !repo.OK("rev-parse", "--verify", "-q", from+"^{commit}") {
 		return Result{}
 	}
@@ -249,9 +290,14 @@ func merge(repo *git.Repo, from string, squash bool) Result {
 		return r
 	}
 	list, n := commits(repo, "HEAD.."+from)
-	if repo.OK("merge-base", "--is-ancestor", "HEAD", from) && !squash {
+	canFastForward := repo.OK("merge-base", "--is-ancestor", "HEAD", from)
+	if canFastForward && !o.squash && !o.noFF {
 		r.add("Fast-forward: your branch just moves ahead to %s. No merge commit.", short(repo, from))
 		listCommits(&r, "Commits coming in", list, n)
+		return r
+	}
+	if o.ffOnly && !canFastForward && !o.squash {
+		r.add("git refuses: this is not a fast-forward (your branch has commits that %s doesn't). Nothing changes.", from)
 		return r
 	}
 	listCommits(&r, "Commits coming in", list, n)
@@ -262,8 +308,10 @@ func merge(repo *git.Repo, from string, squash bool) Result {
 	if len(conflicts) > 0 {
 		listFiles(&r, "CONFLICTS expected in", unique(conflicts))
 		r.add("git will stop for you to fix them (gitwhy resolve), or you can abort.")
-	} else if squash {
+	} else if o.squash {
 		r.add("No conflicts. The changes are staged; you then make one commit.")
+	} else if o.noCommit {
+		r.add("No conflicts. The merge is staged but not committed; you commit it yourself.")
 	} else {
 		r.add("No conflicts. A merge commit is created.")
 	}
@@ -476,7 +524,7 @@ func stash(repo *git.Repo, a danger.Args) Result {
 
 func switchBranch(repo *git.Repo, a danger.Args) Result {
 	pos := a.Positional()
-	if a.Cmd == "checkout" && a.AfterDash() != nil {
+	if a.Cmd == "checkout" && len(a.AfterDash()) > 0 {
 		r := Result{Exact: true}
 		listFiles(&r, "Files overwritten", a.AfterDash())
 		return r
@@ -497,7 +545,11 @@ func switchBranch(repo *git.Repo, a danger.Args) Result {
 	r.add("Your files change to %s.", subject(repo, target))
 	listFiles(&r, "Files that change", changedFiles(repo, "HEAD", target))
 	if dirty := changedFiles(repo, "HEAD"); len(dirty) > 0 {
-		r.add("Your %d uncommitted change(s) come along; git stops if one would be overwritten.", len(dirty))
+		if a.Has("-f", "--force", "--discard-changes") {
+			listFiles(&r, "Uncommitted changes that will be DISCARDED", dirty)
+		} else {
+			r.add("Your %d uncommitted change(s) come along; git stops if one would be overwritten.", len(dirty))
+		}
 	}
 	return r
 }
