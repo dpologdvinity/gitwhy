@@ -1,50 +1,113 @@
+# Post-release check: installs the newest release every documented way, from the real URLs, on real
+# operating systems, and checks that `gitwhy version` reports the release that was just published.
+#
+# Runs automatically after the release workflow succeeds, and can be started by hand. A red job here
+# means that install method is broken for users right now.
+#
+# Two details matter:
+#   - The version to expect comes from the latest GitHub release. If it cannot be read, the whole
+#     workflow fails, so an empty value can never make a check pass.
+#   - GitHub Pages (apt and dnf) publishes a couple of minutes after the release finishes and its
+#     files are cached for up to 10 minutes, so those jobs retry for a while before they give up.
 name: verify-install
-# Installs the latest release the way the README says, from the real URLs, on real OSes.
+
 on:
   workflow_dispatch:
   workflow_run:
     workflows: [release]
     types: [completed]
+
+permissions:
+  contents: read
+
+# Never run two checks against each other; the newest release wins.
+concurrency:
+  group: verify-install
+  cancel-in-progress: true
+
 env:
   GH_TOKEN: ${{ github.token }}
+  # Keep in step with the pinned installer action in ci.yml.
+  PAGES: https://dpologdvinity.github.io/gitwhy
+
 jobs:
+  # Finds the version every other job must see. Fails if it cannot be read.
   latest:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
       - id: v
-        run: echo "version=$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+        run: |
+          tag=$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          test -n "$tag"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
   apt:
     needs: latest
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
     steps:
-      - run: |
+      - name: Add the apt repository
+        run: |
           sudo install -d -m 0755 /etc/apt/keyrings
-          sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.asc -o /etc/apt/keyrings/gitwhy.asc
-          echo "deb [signed-by=/etc/apt/keyrings/gitwhy.asc] https://dpologdvinity.github.io/gitwhy/apt ./" | sudo tee /etc/apt/sources.list.d/gitwhy.list
-          sudo apt-get update && sudo apt-get install -y gitwhy
-          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+          sudo curl -fsSL "$PAGES/gitwhy.asc" -o /etc/apt/keyrings/gitwhy.asc
+          echo "deb [signed-by=/etc/apt/keyrings/gitwhy.asc] $PAGES/apt ./" | sudo tee /etc/apt/sources.list.d/gitwhy.list
+      # Pages may still be serving the previous release: wait until the repository lists the new one.
+      - name: Wait for the new version to appear
+        run: |
+          for i in $(seq 1 30); do
+            sudo apt-get update -o Acquire::https::No-Cache=true -o Acquire::https::Max-Age=0 >/dev/null
+            if apt-cache policy gitwhy | grep -F "Candidate: $WANT"; then exit 0; fi
+            echo "attempt $i: not published yet; waiting"
+            sleep 30
+          done
+          echo "gitwhy $WANT never appeared in the apt repository"
+          exit 1
+      - name: Install and check
+        run: |
+          sudo apt-get install -y gitwhy
+          gitwhy version | grep -F "$WANT"
 
   dnf:
     needs: latest
     runs-on: ubuntu-latest
     container: fedora:latest
+    timeout-minutes: 25
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
     steps:
-      - run: |
-          curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.repo -o /etc/yum.repos.d/gitwhy.repo
+      - name: Add the dnf repository
+        run: curl -fsSL "$PAGES/gitwhy.repo" -o /etc/yum.repos.d/gitwhy.repo
+      - name: Wait for the new version to appear
+        run: |
+          for i in $(seq 1 30); do
+            dnf clean all >/dev/null
+            if dnf -y --refresh list --available gitwhy 2>/dev/null | grep -F "$WANT"; then exit 0; fi
+            echo "attempt $i: not published yet; waiting"
+            sleep 30
+          done
+          echo "gitwhy $WANT never appeared in the dnf repository"
+          exit 1
+      - name: Install and check
+        run: |
           dnf install -y gitwhy
-          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+          gitwhy version | grep -F "$WANT"
 
   npm:
     needs: latest
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
     steps:
       - run: |
           npm install -g @kaitlynbassford/gitwhy
-          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+          gitwhy version | grep -F "$WANT"
 
   brew:
     needs: latest
@@ -53,15 +116,21 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
     steps:
       - run: |
-          [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; fi
           brew install dpologdvinity/gitwhy/gitwhy
-          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+          gitwhy version | grep -F "$WANT"
 
   scoop:
     needs: latest
     runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
     steps:
       - shell: pwsh
         run: |
@@ -69,15 +138,45 @@ jobs:
           $env:PATH += ";$HOME\scoop\shims"
           scoop bucket add gitwhy https://github.com/dpologdvinity/homebrew-gitwhy
           scoop install gitwhy
-          gitwhy version | Select-String -SimpleMatch "${{ needs.latest.outputs.version }}"
-          if (-not $?) { throw "version mismatch" }
+          $out = (gitwhy version) -join "`n"
+          if ($out -notmatch [regex]::Escape($env:WANT)) { throw "version mismatch: got '$out', want $env:WANT" }
 
   powershell:
     needs: latest
     runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
     steps:
       - shell: pwsh
         run: |
           irm https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.ps1 | iex
-          gitwhy version | Select-String -SimpleMatch "${{ needs.latest.outputs.version }}"
-          if (-not $?) { throw "version mismatch" }
+          $out = (gitwhy version) -join "`n"
+          if ($out -notmatch [regex]::Escape($env:WANT)) { throw "version mismatch: got '$out', want $env:WANT" }
+
+  # The curl installer from the README, on Linux and macOS.
+  install-sh:
+    needs: latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      WANT: ${{ needs.latest.outputs.version }}
+    steps:
+      - run: |
+          curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
+          "$HOME/.local/bin/gitwhy" version | grep -F "$WANT"
+
+  # `nix run` builds from source, so its version is a commit hash: only check that it runs.
+  nix:
+    needs: latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # 31.11.3
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - run: nix run github:dpologdvinity/gitwhy -- version | grep -E '^gitwhy '

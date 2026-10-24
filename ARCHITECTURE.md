@@ -47,8 +47,8 @@ These rules explain most of the code. When you change something, keep them true.
    them, and it reports what it left alone.
 6. **No AI, no network, no secrets at run time.** The binary only talks to the local `git`.
 7. **Text for users is plain English and short.** The docs follow [docs/STYLE.md](docs/STYLE.md).
-8. **Needs git 2.38 or newer** (`checkGit` in `cmd/gitwhy/main.go`), because previews rely on
-   `git merge-tree --write-tree`.
+8. **Needs git 2.40 or newer** (`checkGit` in `cmd/gitwhy/main.go`), because previews rely on
+   `git merge-tree --write-tree --merge-base`.
 
 ## Repository layout
 
@@ -187,27 +187,48 @@ Package `internal/snapshot`. A snapshot lives in `<gitdir>/gitwhy/snapshots/<id>
 | Sparse-checkout settings | config values and files |
 | Stashes | the stash list (`Stashes`) |
 
-The working-tree commit has every local branch tip, `HEAD` and stash entry as a parent, and a ref
-`refs/gitwhy/snapshots/<id>` keeps it alive, so `git gc` cannot delete what undo needs. The last
-**20** snapshots per worktree are kept (`Keep`); older ones are pruned.
+The working-tree commit has as parents every commit that `HEAD`, a ref (branches, tags and
+remote-tracking branches; tags are peeled to their commit) or a stash entry points to, and a ref
+`refs/gitwhy/snapshots/<id>` keeps it alive. Other objects refs point to, such as annotated tag
+objects, are kept alive by `refs/gitwhy/snapshots/<id>-<object ID>`. So `git gc` cannot delete what
+undo needs. The last **20** snapshots per worktree are kept (`Keep`). Pruning also removes the folders
+of interrupted snapshots (no `meta.json`, older than 10 minutes) and any snapshot ref whose ID has no
+folder in any worktree of the repository (for example after `git worktree remove`).
+
+`Finish` runs after the command and records the refs and the stash list as they are then (`After`),
+so undo can tell what the command changed from what you changed later.
 
 **Restore** (`Restore`) works in this order:
 
 1. It checks that everything it needs still exists (the saved working-tree commit and the commit
    `HEAD` was on) **before touching anything**, and stops with a plain message if `gc` removed it.
 2. It saves the current state as a new snapshot (`Result.Before`), so an undo can itself be undone.
-   Files the undo is about to overwrite that this snapshot would not normally save, because they
-   are ignored now, are added to it first (`overwrittenUnsaved`).
-3. It moves all refs in **one transaction**, so a failure there changes nothing.
-4. It restores `HEAD`, the index, working-tree files and any deleted objects.
+   Ignored files the undo is about to overwrite or delete (including ones inside a folder that
+   replaces a file) are added to it first (`overwrittenUnsaved`).
+3. It moves refs in two steps: refs that go away are deleted in one transaction, then the rest are
+   written back in another, so `foo` and `foo/bar` can swap places. If the second step fails, the
+   deleted refs are created again, so a failure there changes nothing.
+4. It restores `HEAD`, the index, working-tree files and any deleted objects. If some file cannot
+   be written or removed it still restores all the others, then reports the errors and says that
+   running `gitwhy undo` again returns to the state before this undo.
+5. It calls `Finish` on the "before" snapshot, so redoing an undo also leaves later work alone.
 
 Rules that protect your work:
 
 - A ref is restored only if it is still at the value `Finish` recorded (`After`). A branch you
   moved afterwards, in plain git or another worktree, is left alone and listed in
   `Result.Skipped`.
+- If the branch `HEAD` was on is skipped, checked out in another worktree, or its commits are gone,
+  `HEAD`, the index and the files are left alone too (they would not match the branch).
+- Stashes made after the command are kept: they are put back on top of the restored list.
 - Branches checked out in another worktree are not touched (`checkedOutElsewhere`).
+- Sparse-checkout settings are restored in the shared config file only; `config.worktree` is copied
+  as a file, so one worktree's settings never leak into another.
 - Submodules (gitlinks) are handled separately from regular files.
+
+File names are literal: `internal/git` runs every git command with `GIT_LITERAL_PATHSPECS=1`, so a
+file called `[ab].txt` never matches `a.txt`. Commands the user typed (`gitwhy run git ...`) and
+their previews turn that off again, so a quoted `'*.c'` still globs like the real git.
 
 Anything already sent to a remote (`push`) cannot be undone locally. The danger rules say so.
 
@@ -319,25 +340,39 @@ from a deleted branch or a hard reset, and dangling staged files.
 | Package and repo install | `scripts/test-repos.sh`, `scripts/test-pkgs.sh` | Docker: builds the signed apt and dnf repos with a throwaway key, installs from them, checks that tampering is rejected |
 | After each release | `.github/workflows/verify-install.yml` | installs the real release with apt, dnf, npm, Homebrew, Scoop and PowerShell |
 
-CI (`.github/workflows/ci.yml`) runs `go vet`, `go test ./...` and the npm tests on Linux and
-Windows, and `golangci-lint` on Linux. A Windows-only step also runs the remote tests with
-`core.autocrlf=true`, the Git for Windows default, and runs `install.ps1` under PowerShell 7 and
-5.1. `.github/workflows/packages.yml` builds the Linux packages and tests them when packaging files
-change.
+CI (`.github/workflows/ci.yml`) is one pipeline with these jobs, and `fail-fast` everywhere:
+
+| Job | What it checks |
+|---|---|
+| `setup` | dependencies download and verify (`go mod verify`), `go.mod` and `go.sum` are tidy, the whole module compiles |
+| `lint` | `gofmt`, `go vet`, `golangci-lint`, `govulncheck`, `actionlint`, `shellcheck`, syntax of the npm and Python files, and that `THIRD_PARTY_LICENSES` is up to date |
+| `test` | the full suite on Linux and Windows. Linux also measures statement coverage and fails below the floor (`COVERAGE_FLOOR` in `ci.yml`). Windows also runs the remote tests with `core.autocrlf=true` (the Git for Windows default) and `install.ps1` under PowerShell 7 and 5.1 |
+| `build` | `goreleaser check`, a snapshot build of every release artifact, then `scripts/test-repos.sh` and `scripts/test-pkgs.sh` install them in clean containers. The artifacts are kept for 7 days |
+| `nix` | builds the Nix flake (fails when `vendorHash` is stale) |
+
+Coverage counts only what `go test` runs in-process. The end-to-end tests run the built binary, so
+they prove behavior but are not counted: `cmd/gitwhy` and `internal/ui` show 0%. Every third-party
+action is pinned to a full commit SHA and every tool to an exact version; Dependabot proposes the
+updates. `.github/workflows/check-secrets.yml` (manual) checks that the release secrets are set and
+that the Homebrew token can write to the tap.
 
 ## Build, release and packaging
 
-A tag `v*` triggers `.github/workflows/release.yml`:
+A tag `v*` triggers `.github/workflows/release.yml`. It calls the CI pipeline first, so nothing is
+published unless lint, tests and the build pass. Releases run one at a time and are never cancelled.
 
-1. **goreleaser** builds Linux, macOS and Windows binaries (amd64 and arm64), `.deb`, `.rpm`,
-   `.apk` and Arch packages, checksums, and a GitHub release. It also publishes a Homebrew cask
-   and a Scoop manifest to the `homebrew-gitwhy` repository, and (with a token) opens a winget PR.
-2. **`repos` job** builds a signed apt repository and dnf repository from the release's packages
+1. **`release` job**: goreleaser builds Linux, macOS and Windows binaries (amd64 and arm64), `.deb`,
+   `.rpm`, `.apk` and Arch packages, checksums, and a GitHub release. The archives and packages
+   include `THIRD_PARTY_LICENSES`, and the `.deb`/`.rpm` require `git >= 2.40`. It also publishes a
+   Homebrew cask and a Scoop manifest to the `homebrew-gitwhy` repository, and (with a token) opens
+   a winget PR.
+2. **`repos` job**: builds a signed apt repository and dnf repository from the release's packages
    (`scripts/build-repos.sh`) and publishes them to the `gh-pages` branch, served by GitHub Pages.
-3. **`npm` job** publishes `@kaitlynbassford/gitwhy`, a package that downloads and verifies the
-   release binary.
-4. **`verify-install`** then installs the new release every supported way on real operating
-   systems.
+3. **`npm` job**: publishes `@kaitlynbassford/gitwhy` (with provenance), a package that downloads
+   and verifies the release binary.
+4. **`verify-install`** then installs the new release every supported way (apt, dnf, npm, Homebrew,
+   Scoop, `install.ps1`, `install.sh`, Nix) on real operating systems, waiting for GitHub Pages to
+   publish, and fails if any of them reports the wrong version.
 
 `install.sh` and `install.ps1` download the release archive and **verify its SHA-256 against
 `checksums.txt` before installing**. `flake.nix` builds from source for Nix.
