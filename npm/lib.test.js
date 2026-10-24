@@ -32,3 +32,45 @@ test('verify rejects data that does not match the checksum', () => {
   assert.doesNotThrow(() => verify(data, sum));
   assert.throws(() => verify(Buffer.from('hellp'), sum), /checksum mismatch/);
 });
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { tarBin, place } = require('./lib');
+
+test('tarBin uses the Windows system tar, not Git Bash GNU tar from PATH', () => {
+  assert.strictEqual(tarBin('win32', { SystemRoot: 'C:\\Windows' }), 'C:\\Windows\\System32\\tar.exe');
+  assert.strictEqual(tarBin('linux', {}), 'tar');
+  assert.strictEqual(tarBin('darwin', {}), 'tar');
+});
+
+test('place leaves no binary behind when extraction fails', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-test-'));
+  const dir = path.join(root, 'vendor', '1.0.0');
+  assert.throws(() => place(dir, 'gitwhy', (stage) => {
+    fs.writeFileSync(path.join(stage, 'gitwhy'), 'half'); // truncated write, then a crash
+    throw new Error('tar died');
+  }), /tar died/);
+  assert.strictEqual(fs.existsSync(dir), false);
+  assert.deepStrictEqual(fs.readdirSync(path.join(root, 'vendor')), []); // no staging dir left either
+  fs.rmSync(root, { recursive: true });
+});
+
+test('place moves a finished extraction into place', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-test-'));
+  const dir = path.join(root, 'vendor', '1.0.0');
+  place(dir, 'gitwhy', (stage) => fs.writeFileSync(path.join(stage, 'gitwhy'), 'whole'));
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'gitwhy'), 'utf8'), 'whole');
+  fs.rmSync(root, { recursive: true });
+});
+
+test('place keeps the winner when another process installed first', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-test-'));
+  const dir = path.join(root, 'vendor', '1.0.0');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'gitwhy'), 'first');
+  place(dir, 'gitwhy', (stage) => fs.writeFileSync(path.join(stage, 'gitwhy'), 'second'));
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'gitwhy'), 'utf8'), 'first');
+  assert.deepStrictEqual(fs.readdirSync(path.join(root, 'vendor')), ['1.0.0']);
+  fs.rmSync(root, { recursive: true });
+});

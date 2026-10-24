@@ -57,6 +57,33 @@ function get(url, redirects = 5) {
   });
 }
 
+// tarBin is the tar that can read our archive. On Windows, PATH may start with Git Bash's GNU tar,
+// which can't read zip or C:\ paths; the system bsdtar (Windows 10+) can.
+function tarBin(platform = process.platform, env = process.env) {
+  return platform === 'win32' ? path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+}
+
+// place builds the install in a staging folder next to dir, then renames it into place, so a
+// crash mid-extract never leaves a truncated binary that later runs would trust. If another
+// process finished first, theirs is kept.
+function place(dir, exe, produce) {
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  const stage = fs.mkdtempSync(dir + '.tmp-');
+  try {
+    produce(stage);
+    fs.chmodSync(path.join(stage, exe), 0o755);
+    try {
+      fs.renameSync(stage, dir);
+    } catch (e) {
+      if (!fs.existsSync(path.join(dir, exe))) throw e;
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+  } catch (e) {
+    fs.rmSync(stage, { recursive: true, force: true });
+    throw e;
+  }
+}
+
 // ensure returns the path of the gitwhy binary, downloading it on first use.
 async function ensure() {
   const ver = version();
@@ -72,14 +99,11 @@ async function ensure() {
   try {
     const file = path.join(tmp, t.archive);
     fs.writeFileSync(file, data);
-    fs.mkdirSync(dir, { recursive: true });
-    // tar ships with Linux, macOS and Windows 10+ (bsdtar reads zip too).
-    execFileSync('tar', ['-xf', file, '-C', dir, t.exe]);
+    place(dir, t.exe, (stage) => execFileSync(tarBin(), ['-xf', file, '-C', stage, t.exe]));
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
-  fs.chmodSync(bin, 0o755);
   return bin;
 }
 
-module.exports = { target, expectedSum, verify, ensure };
+module.exports = { target, expectedSum, verify, tarBin, place, ensure };
