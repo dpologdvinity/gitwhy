@@ -53,6 +53,21 @@ func New(content fs.FS) (*App, error) {
 // ErrCancelled means the user backed out; callers exit quietly.
 var ErrCancelled = errors.New("cancelled")
 
+// GitFailed means git ran attached to the terminal and failed, and has already printed why.
+// The program exits with Code (git's exit status) and prints nothing more.
+type GitFailed struct{ Code int }
+
+func (e GitFailed) Error() string { return fmt.Sprintf("git exited with status %d", e.Code) }
+
+// passthrough turns the error of a git command run straight through (stderr shown to the user)
+// into GitFailed, so its message is not printed twice and its exit status is kept.
+func passthrough(err error) error {
+	if code := git.ExitCode(err); code > 0 {
+		return GitFailed{code}
+	}
+	return err
+}
+
 func cancelled(err error) error {
 	if errors.Is(err, huh.ErrUserAborted) {
 		return ErrCancelled

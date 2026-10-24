@@ -42,6 +42,10 @@ Flags:
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		var gf ui.GitFailed
+		if errors.As(err, &gf) { // git already said why
+			os.Exit(gf.Code)
+		}
 		if errors.Is(err, ui.ErrCancelled) {
 			os.Exit(1)
 		}
@@ -69,22 +73,23 @@ func run(args []string) error {
 	if len(args) >= 2 && args[0] == "hook" {
 		return hookCmd(args[1:])
 	}
+	// gitwhy's own flags come before the first word; after it they belong to that command
+	// (e.g. "gitwhy run git grep -q foo").
 	quiet := false
-	var rest []string
-	for i, a := range args {
-		if a == "-q" || a == "--quiet" {
-			quiet = true
-			continue
-		}
-		if a == "-h" || a == "--help" || (i == 0 && a == "help") {
+	rest := args
+	for len(rest) > 0 && (rest[0] == "-q" || rest[0] == "--quiet") {
+		quiet = true
+		rest = rest[1:]
+	}
+	if len(rest) > 0 {
+		switch rest[0] {
+		case "-h", "--help", "help":
 			fmt.Print(usage)
 			return nil
-		}
-		if i == 0 && (a == "version" || a == "--version") {
+		case "version", "--version":
 			fmt.Println("gitwhy", version)
 			return nil
 		}
-		rest = append(rest, a)
 	}
 	if err := checkGit(); err != nil {
 		return err
@@ -206,14 +211,14 @@ func hookCmd(args []string) error {
 	return fmt.Errorf("unknown hook command %q: use init, install or uninstall", args[0])
 }
 
-// checkGit needs git 2.38+ (merge-tree --write-tree, used for previews).
+// checkGit needs git 2.40+: previews use "merge-tree --write-tree --merge-base".
 func checkGit() error {
 	major, minor, err := git.Version()
 	if err != nil {
 		return fmt.Errorf("git not found: install git first (%v)", err)
 	}
-	if major < 2 || (major == 2 && minor < 38) {
-		return fmt.Errorf("gitwhy needs git 2.38 or newer; you have %d.%d", major, minor)
+	if major < 2 || (major == 2 && minor < 40) {
+		return fmt.Errorf("gitwhy needs git 2.40 or newer; you have %d.%d", major, minor)
 	}
 	return nil
 }
