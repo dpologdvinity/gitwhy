@@ -7,3 +7,5 @@
 /npm/THIRD_PARTY_LICENSES
 /npm/*.tgz
 .env
+__pycache__/
+*.pyc
