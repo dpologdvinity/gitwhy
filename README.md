@@ -1,10 +1,18 @@
 # gitwhy
 
 [![ci](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml)
+[![release installs verified](https://github.com/dpologdvinity/gitwhy/actions/workflows/verify-install.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/verify-install.yml)
 [![latest release](https://img.shields.io/github/v/release/dpologdvinity/gitwhy)](https://github.com/dpologdvinity/gitwhy/releases/latest)
 [![npm](https://img.shields.io/npm/v/@kaitlynbassford/gitwhy)](https://www.npmjs.com/package/@kaitlynbassford/gitwhy)
+[![downloads](https://img.shields.io/github/downloads/dpologdvinity/gitwhy/total)](https://github.com/dpologdvinity/gitwhy/releases)
 [![Go version](https://img.shields.io/github/go-mod/go-version/dpologdvinity/gitwhy)](go.mod)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dpologdvinity/gitwhy)](https://goreportcard.com/report/github.com/dpologdvinity/gitwhy)
+[![platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-informational)](#install)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![last commit](https://img.shields.io/github/last-commit/dpologdvinity/gitwhy)](https://github.com/dpologdvinity/gitwhy/commits/main)
+[![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196.svg)](https://www.conventionalcommits.org)
+[![Dependabot](https://img.shields.io/badge/dependabot-enabled-025e8c?logo=dependabot)](.github/dependabot.yml)
+[![stars](https://img.shields.io/github/stars/dpologdvinity/gitwhy?style=flat)](https://github.com/dpologdvinity/gitwhy/stargazers)
 
 **Do anything with git without looking it up. See what will happen first. Undo it after.**
 
