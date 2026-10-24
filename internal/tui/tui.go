@@ -62,7 +62,12 @@ func (f file) label() string {
 	return "changed"
 }
 
-type branch struct{ name, track, when, subject string }
+type branch struct {
+	name, track, when, subject string
+	// switchTo is the name to give "git switch": the branch itself, or for a remote branch its
+	// name without the remote ("feat" for "origin/feat"), because git refuses a remote branch.
+	switchTo string
+}
 
 type model struct {
 	repo   *git.Repo
@@ -144,14 +149,19 @@ func (m *model) load() {
 		m.rows, _ = graph.Load(r, m.all, 200)
 	}
 	m.brs = nil
-	if refs, err := r.Output("for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(upstream:track)%00%(committerdate:relative)%00%(subject)", "refs/heads", "refs/remotes"); err == nil && refs != "" {
+	if refs, err := r.Output("for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(upstream:track)%00%(committerdate:relative)%00%(subject)%00%(refname:lstrip=3)", "refs/heads", "refs/remotes"); err == nil && refs != "" {
 		for _, l := range strings.Split(refs, "\n") {
 			f := strings.Split(l, "\x00")
-			if len(f) != 4 || strings.HasSuffix(f[0], "/HEAD") {
+			if len(f) != 5 || strings.HasSuffix(f[0], "/HEAD") {
 				continue
 			}
-			name := strings.TrimPrefix(strings.TrimPrefix(f[0], "refs/heads/"), "refs/remotes/")
-			m.brs = append(m.brs, branch{name, f[1], f[2], f[3]})
+			b := branch{name: strings.TrimPrefix(f[0], "refs/heads/"), track: f[1], when: f[2], subject: f[3]}
+			b.switchTo = b.name
+			if remote, ok := strings.CutPrefix(f[0], "refs/remotes/"); ok {
+				// "switch feat" goes to a local feat if there is one, else makes it from origin/feat.
+				b.name, b.switchTo = remote, f[4]
+			}
+			m.brs = append(m.brs, b)
 		}
 	}
 	for i, f := range m.files {
@@ -488,7 +498,7 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 		b := m.brs[i].name
 		switch k {
 		case "enter":
-			return run("switch-branch", recipe.Answers{"target": b}), true
+			return run("switch-branch", recipe.Answers{"target": m.brs[i].switchTo}), true
 		case "m":
 			return run("merge-branch", recipe.Answers{"from": b}), true
 		case "b":

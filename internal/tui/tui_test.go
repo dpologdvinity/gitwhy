@@ -162,6 +162,33 @@ func TestDeleteUntrackedFilePresetsIt(t *testing.T) {
 	}
 }
 
+// TestSwitchToRemoteBranchUsesShortName proves that Enter on a remote branch passes the plain
+// name ("feat"), which git switch accepts, instead of "origin/feat", which it refuses.
+func TestSwitchToRemoteBranchUsesShortName(t *testing.T) {
+	r := testrepo.New(t)
+	c := r.Commit("one", "a.txt", "1\n")
+	r.Git("remote", "add", "origin", t.TempDir()) // git switch only guesses from a configured remote
+	r.Git("update-ref", "refs/remotes/origin/feat", c)
+	m := &model{repo: r.Repo, tab: tabBranches}
+	m.load()
+	i := -1
+	for j, b := range m.brs {
+		if b.name == "origin/feat" {
+			i = j
+		}
+	}
+	if i < 0 {
+		t.Fatalf("origin/feat not listed: %+v", m.brs)
+	}
+	a, ok := m.tabKey("enter", i)
+	if !ok || a.Recipe != "switch-branch" || a.Preset["target"] != "feat" {
+		t.Fatalf("enter on origin/feat = %+v", a)
+	}
+	if _, err := r.Output("switch", "-q", a.Preset["target"].(string)); err != nil {
+		t.Fatalf("git switch with the preset failed: %v", err)
+	}
+}
+
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
