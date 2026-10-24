@@ -16,8 +16,8 @@ questions:
     ask: Resolve them how?
     type: choice
     options:
-      - {label: "Keep ours", value: "ours", danger: "Their side of each conflicting change is discarded in these files."}
-      - {label: "Keep theirs", value: "theirs", danger: "Our side of each conflicting change is discarded in these files."}
+      - {label: "Keep ours", value: "ours", danger: "These files become exactly our version: everything their side changed in them is discarded, conflicting or not."}
+      - {label: "Keep theirs", value: "theirs", danger: "These files become exactly their version: everything our side changed in them is discarded, conflicting or not."}
       - {label: "Open my editor / merge tool and fix by hand", value: "tool"}
       - {label: "I've already fixed them; mark as resolved", value: "done"}
 steps:
