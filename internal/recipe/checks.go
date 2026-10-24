@@ -30,6 +30,10 @@ var checks = map[string]func(*git.Repo) bool{
 	"detached-head": func(r *git.Repo) bool {
 		return !r.OK("symbolic-ref", "-q", "HEAD")
 	},
+	// Nothing is staged for the next commit.
+	"nothing-staged": func(r *git.Repo) bool {
+		return r.OK("diff", "--cached", "--quiet")
+	},
 	"has-conflicts": func(r *git.Repo) bool {
 		out, _ := r.Output("diff", "--name-only", "--diff-filter=U")
 		return out != ""

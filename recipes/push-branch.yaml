@@ -1,5 +1,5 @@
 title: Push my branch
-aliases: [push, upload, publish branch, push new branch, set upstream, force push]
+aliases: [push, upload, publish branch, push new branch, force push]
 category: sync with remote
 checks:
   - {if: detached-head, block: "You're not on a branch."}

@@ -1,5 +1,5 @@
 title: Throw away changes to files
-aliases: [discard changes, revert file, undo file changes, checkout file, restore file, reset file]
+aliases: [discard changes, revert file, undo file changes, checkout file, restore file]
 category: files
 questions:
   - {id: files, ask: "Which files?", type: files, source: unstaged, multi: true}

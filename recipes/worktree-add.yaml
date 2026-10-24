@@ -5,5 +5,8 @@ questions:
   - {id: target, ask: "Which branch?", type: branch, source: all}
   - {id: dir, ask: "Folder for it (e.g. ../hotfix)", type: text}
 steps:
-  - git: [worktree, add, "{{.dir}}", "{{.target}}"]
-predict: Folder {{.dir}} gets a checkout of {{.target}}, sharing this repo's history. Your current folder doesn't change.
+  - when: '{{not .target_track}}'
+    git: [worktree, add, "{{.dir}}", "{{.target_local}}"]
+  - when: '{{.target_track}}'
+    git: [worktree, add, --track, -b, "{{.target_local}}", "{{.dir}}", "{{.target_track}}"]
+predict: "Folder {{.dir}} gets a checkout of {{if .target_track}}a new local branch {{.target_local}}, made from {{.target_track}} and tracking it{{else}}{{.target_local}}{{end}}, sharing this repo's history. Your current folder doesn't change."

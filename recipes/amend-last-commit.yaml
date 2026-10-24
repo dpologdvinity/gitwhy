@@ -8,5 +8,5 @@ questions:
   - {id: files, ask: "Which changed files to add?", type: files, source: changed, multi: true}
 steps:
   - git: [add, -A, --, "{{.files}}"]
-  - git: [commit, --amend, --no-edit, --, "{{.files}}"]
+  - git: [commit, --amend, --no-edit, --, "{{.files}}", "{{.files_from}}"]
 predict: The chosen changes join the last commit, keeping its message. It gets a new ID.

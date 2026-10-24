@@ -34,6 +34,7 @@ func TestSearchFindsRecipes(t *testing.T) {
 		"big files lfs":                "lfs-track",
 		"remove password from history": "remove-file-from-history",
 		"cherry pick":                  "copy-commit",
+		"commit staged":                "commit-staged",
 	}
 	for q, want := range cases {
 		found := false
@@ -53,6 +54,29 @@ func TestSearchFindsRecipes(t *testing.T) {
 	if r := ix.Search("cherry-pick", 1); len(r) == 0 {
 		t.Error("no result for cherry-pick")
 	}
+}
+
+// TestSafeRecipeFirst proves that for "reset file" (git's way to unstage a file) the first
+// recipe found is "Unstage files", not the destructive "Throw away changes to files".
+func TestSafeRecipeFirst(t *testing.T) {
+	fsys := os.DirFS("../..")
+	k, err := kb.Load(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, err := recipe.Load(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range New(k, rs).Search("reset file", 15) {
+		if r.Kind == Recipe {
+			if r.Recipe.ID != "unstage-files" {
+				t.Errorf("first recipe for \"reset file\" is %s, want unstage-files", r.Recipe.ID)
+			}
+			return
+		}
+	}
+	t.Error("no recipe for \"reset file\"")
 }
 
 func TestCloseEnough(t *testing.T) {

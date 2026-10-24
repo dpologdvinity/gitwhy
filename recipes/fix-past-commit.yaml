@@ -10,7 +10,7 @@ steps:
   - when: '{{eq .commit_pushed "true"}}'
     warn: "That commit is already on the remote. Changing it rewrites shared history; you'll need to force-push."
   - git: [add, -A, --, "{{.files}}"]
-  - git: [commit, "--fixup={{.commit}}", --, "{{.files}}"]
+  - git: [commit, "--fixup={{.commit}}", --, "{{.files}}", "{{.files_from}}"]
   - git: [rebase, -i, --autosquash, --autostash, --rebase-merges, "{{.commit_base}}"]
     env: [GIT_SEQUENCE_EDITOR=true]
 predict: The chosen file changes become part of {{.commit}}. It and every later commit get new IDs.

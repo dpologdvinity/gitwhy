@@ -1,0 +1,12 @@
+# Commits exactly what is staged, as it is. There is no "git add" and no file list, so hunks and
+# lines staged one by one stay as staged and unstaged edits stay out of the commit.
+title: Commit what is staged
+aliases: [commit staged, commit staged changes, commit index, commit only staged, commit what i staged]
+category: commits
+checks:
+  - {if: nothing-staged, block: "Nothing is staged. Stage the changes you want to commit first.", suggest: stage-files}
+questions:
+  - {id: message, ask: "Commit message", type: text}
+steps:
+  - git: [commit, -m, "{{.message}}"]
+predict: A new commit "{{.message}}" is added to {{.branch}} with exactly what is staged. Unstaged changes stay in your files.

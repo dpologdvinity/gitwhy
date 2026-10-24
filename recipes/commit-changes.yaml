@@ -6,5 +6,5 @@ questions:
   - {id: message, ask: "Commit message", type: text}
 steps:
   - git: [add, -A, --, "{{.files}}"]
-  - git: [commit, -m, "{{.message}}", --, "{{.files}}"]
+  - git: [commit, -m, "{{.message}}", --, "{{.files}}", "{{.files_from}}"]
 predict: A new commit "{{.message}}" is added to {{.branch}} with the chosen files.

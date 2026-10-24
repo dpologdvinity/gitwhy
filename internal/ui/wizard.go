@@ -57,6 +57,8 @@ func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 			a.deriveCommit(q.ID, v.(string), ans)
 		} else if q != nil && q.Type == "branch" {
 			a.deriveBranch(q.ID, v.(string), ans)
+		} else if q != nil && q.Type == "files" {
+			a.deriveFiles(q.ID, v, ans)
 		}
 	}
 	heading(r.Title)
@@ -227,11 +229,34 @@ func (a *App) askBranch(q *recipe.Question, title, def string, ans recipe.Answer
 }
 
 // deriveBranch sets a branch answer plus where it pushes/pulls: _remote and _merge (remote branch).
+// It also sets _local, the local branch to switch to, and _track, the remote-tracking branch to
+// make _local from when no local branch of that name exists yet ("" otherwise). git refuses to
+// switch to a remote branch such as origin/feat, and checking one out would detach HEAD.
 func (a *App) deriveBranch(id, v string, ans recipe.Answers) {
 	ans[id] = v
 	ans[id+"_remote"], _ = a.Repo.Output("config", "branch."+v+".remote")
 	merge, _ := a.Repo.Output("config", "branch."+v+".merge")
 	ans[id+"_merge"] = strings.TrimPrefix(merge, "refs/heads/")
+	local, track := v, ""
+	isRef := func(ref string) bool { return a.Repo.OK("show-ref", "--verify", "-q", ref) }
+	if v != "" && !isRef("refs/heads/"+v) {
+		remotes, _ := a.Repo.Output("remote")
+		for _, r := range strings.Fields(remotes) {
+			if name, ok := strings.CutPrefix(v, r+"/"); ok && isRef("refs/remotes/"+v) {
+				local, track = name, v // picked as origin/feat
+			} else if isRef("refs/remotes/" + r + "/" + v) {
+				if track != "" { // on several remotes: let git say which to pick
+					local, track = v, ""
+					break
+				}
+				track = r + "/" + v // given as feat, as the TUI does
+			}
+		}
+		if track != "" && isRef("refs/heads/"+local) {
+			track = "" // a local branch of that name already exists: use it
+		}
+	}
+	ans[id+"_local"], ans[id+"_track"] = local, track
 }
 
 func (a *App) askCommit(q *recipe.Question, title string, ans recipe.Answers) error {
@@ -284,6 +309,7 @@ func (a *App) pushed(commit string) string {
 func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) error {
 	var out string
 	var err error
+	var files []string
 	switch q.Source {
 	case "staged":
 		out, err = a.Repo.Output("diff", "--cached", "--name-only", "-z")
@@ -297,14 +323,14 @@ func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) err
 		out, err = a.Repo.Output("ls-files", "-z")
 	default: // changed: staged, unstaged and untracked
 		out, err = a.Repo.Output("status", "--porcelain=v1", "-z", "--untracked-files=all")
-		if err == nil {
-			out = statusPaths(out)
-		}
+		files, _ = statusPaths(out)
 	}
 	if err != nil {
 		return err
 	}
-	files := splitZ(out)
+	if files == nil {
+		files = splitZ(out)
+	}
 	if len(files) == 0 {
 		return fmt.Errorf("no matching files")
 	}
@@ -312,20 +338,25 @@ func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) err
 		var v string
 		err := prompt(huh.NewInput().Title(title).Description("Path relative to the repo root").Value(&v))
 		if q.Multi { // one path, as typed: names can contain spaces
-			ans[q.ID] = []string{v}
+			a.deriveFiles(q.ID, []string{v}, ans)
 		} else {
-			ans[q.ID] = v
+			a.deriveFiles(q.ID, v, ans)
 		}
 		return err
 	}
+	from := a.renames()
 	var opts []huh.Option[string]
 	for _, f := range files {
-		opts = append(opts, huh.NewOption(f, f))
+		label := f
+		if old, ok := from[f]; ok {
+			label += "  (renamed from " + old + ")"
+		}
+		opts = append(opts, huh.NewOption(label, f))
 	}
 	if !q.Multi {
 		var v string
 		err := prompt(huh.NewSelect[string]().Title(title).Options(opts...).Value(&v).Height(min(len(opts)+2, 15)))
-		ans[q.ID] = v
+		a.deriveFiles(q.ID, v, ans)
 		return err
 	}
 	var v []string
@@ -340,13 +371,41 @@ func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) err
 			}
 			return nil
 		}))
-	ans[q.ID] = v
+	a.deriveFiles(q.ID, v, ans)
 	return err
 }
 
-// statusPaths extracts paths from "git status --porcelain=v1 -z" (renames have two paths).
-func statusPaths(out string) string {
+// deriveFiles sets a files answer (a path or a list of paths) and <id>_from: the original paths
+// of the picked files that are staged renames. A commit limited to the new path alone would add
+// a copy and leave the deletion of the original staged, so recipes that commit paths pass both.
+func (a *App) deriveFiles(id string, v any, ans recipe.Answers) {
+	ans[id] = v
+	paths, _ := v.([]string)
+	if s, ok := v.(string); ok {
+		paths = []string{s}
+	}
+	from := a.renames()
+	var olds []string // a typed nil list still splats to no arguments
+	for _, p := range paths {
+		if old, ok := from[p]; ok {
+			olds = append(olds, old)
+		}
+	}
+	ans[id+"_from"] = olds
+}
+
+// renames maps the new path of each staged rename to its original path.
+func (a *App) renames() map[string]string {
+	out, _ := a.Repo.Output("status", "--porcelain=v1", "-z", "--untracked-files=no")
+	_, from := statusPaths(out)
+	return from
+}
+
+// statusPaths parses "git status --porcelain=v1 -z": the path of each changed file, and for
+// renames a map from the new path to the original one (copies keep their original unchanged).
+func statusPaths(out string) ([]string, map[string]string) {
 	var paths []string
+	from := map[string]string{}
 	f := strings.Split(out, "\x00")
 	for i := 0; i < len(f); i++ {
 		e := f[i]
@@ -354,11 +413,14 @@ func statusPaths(out string) string {
 			continue
 		}
 		paths = append(paths, e[3:])
-		if e[0] == 'R' || e[0] == 'C' {
-			i++ // skip the original path
+		if (e[0] == 'R' || e[0] == 'C') && i+1 < len(f) {
+			i++ // the original path is the next field
+			if e[0] == 'R' {
+				from[e[3:]] = f[i]
+			}
 		}
 	}
-	return strings.Join(paths, "\x00")
+	return paths, from
 }
 
 func splitZ(s string) []string {
@@ -439,8 +501,8 @@ func (a *App) askTodo(q *recipe.Question, title string, ans recipe.Answers) erro
 			return huh.ErrUserAborted
 		}
 		if pick == "done" {
-			if a := items[0].Action; a == "squash" || a == "fixup" {
-				warn("The first (oldest) commit can't be squashed: there's nothing above it.")
+			if i := orphanSquash(items); i >= 0 {
+				warn(fmt.Sprintf("Commit %d (%s) can't be squashed: no kept commit is above it.", i+1, items[i].short))
 				continue
 			}
 			break
@@ -501,6 +563,24 @@ func (a *App) askTodo(q *recipe.Question, title string, ans recipe.Answers) erro
 	}
 	ans[q.ID+"_pushed"] = a.pushed(oldest)
 	return nil
+}
+
+// orphanSquash returns the index of the first squash or fixup with no kept (not dropped) commit
+// above it, or -1. git stops on such a plan with "cannot 'squash' without a previous commit".
+func orphanSquash(items []todoItem) int {
+	kept := false
+	for i, it := range items {
+		switch it.Action {
+		case "squash", "fixup":
+			if !kept {
+				return i
+			}
+		case "drop":
+		default:
+			kept = true
+		}
+	}
+	return -1
 }
 
 // RunRecipeID runs a recipe by its ID.
