@@ -316,7 +316,7 @@ type Result struct {
 
 // Restore puts the repository back to s. It snapshots the current state first, so the restore
 // itself can be undone. Refs changed since the command ran are left alone and reported.
-func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
+func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	res := &Result{}
 
 	// Check everything we need still exists before touching anything.
@@ -340,6 +340,13 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 		}
 	}
 	res.Before = cur
+	// Record the refs this restore leaves, even if it fails partway, so a redo leaves alone
+	// refs changed after it.
+	defer func() {
+		if ferr := Finish(r, cur); ferr != nil {
+			err = errors.Join(err, ferr)
+		}
+	}()
 
 	// 1. Refs: deletes, then updates, each one transaction. If the updates fail, the deleted refs
 	// are put back, so a failure here changes nothing.

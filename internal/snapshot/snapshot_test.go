@@ -479,6 +479,42 @@ func TestFailedRefUpdatePutsDeletedRefsBack(t *testing.T) {
 	}
 }
 
+// TestRedoLeavesLaterRefsAlone proves redo (undo of an undo) leaves alone a branch moved after
+// the undo: the undo's own snapshot must record the refs it left behind.
+func TestRedoLeavesLaterRefsAlone(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Git("branch", "feat")
+	s, err := Take(r.Repo, "commit", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Commit("c2", "a.txt", "2\n")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("switch", "-q", "feat")
+	later := r.Commit("later on feat", "b.txt", "b\n")
+	r.Git("switch", "-q", "main")
+	redo, err := Restore(r.Repo, res.Before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("rev-parse", "feat"); got != later {
+		t.Errorf("redo moved feat back")
+	}
+	if got := r.Git("log", "-1", "--format=%s", "main"); got != "c2" {
+		t.Errorf("main = %q, want c2", got)
+	}
+	if len(redo.Skipped) != 1 || !strings.Contains(redo.Skipped[0], "feat") {
+		t.Errorf("skipped = %q", redo.Skipped)
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()
