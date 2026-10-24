@@ -131,6 +131,20 @@ func TestReloadKeepsCursorOnBranch(t *testing.T) {
 	}
 }
 
+// TestUnstageInRepoWithoutCommits is a regression test: space on a staged file must unstage it
+// even before the first commit, where "git restore --staged" fails for lack of HEAD.
+func TestUnstageInRepoWithoutCommits(t *testing.T) {
+	r := testrepo.New(t)
+	r.Write("a.txt", "a\n")
+	r.Git("add", "a.txt")
+	m := &model{repo: r.Repo}
+	m.load()
+	m.key("space")
+	if len(m.files) != 1 || !m.files[0].untracked() {
+		t.Fatalf("file still staged: %+v (msg %q)", m.files, m.msg)
+	}
+}
+
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")

@@ -409,7 +409,7 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 				return run("resolve-conflicts", recipe.Answers{"files": []string{f.path}}), true
 			}
 			if f.staged() {
-				m.quick("restore", "--staged", "--", f.path)
+				m.quick("reset", "-q", "--", f.path) // unlike "restore --staged", works before the first commit
 			} else {
 				m.quick("add", "-A", "--", f.path)
 			}
