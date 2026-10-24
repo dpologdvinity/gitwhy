@@ -11,6 +11,8 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestEventsAndUndo proves reflog entries become events with the right kind and text, and that
+// undoing a merge resets to the commit before it.
 func TestEventsAndUndo(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -44,6 +46,8 @@ func TestEventsAndUndo(t *testing.T) {
 	}
 }
 
+// TestLostObjects proves a commit from a deleted branch and a staged file lost by a hard reset
+// are both found, with their subject or first line as the title.
 func TestLostObjects(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")

@@ -40,11 +40,13 @@ func (e Event) Undo(repo *git.Repo) []string {
 	return []string{"branch", "-f", strings.TrimPrefix(e.Ref, "refs/heads/"), e.Before}
 }
 
+// entry is one reflog line: the commit the ref moved to, the reflog message and when.
 type entry struct {
 	id, msg string
 	t       time.Time
 }
 
+// reflog reads the newest n reflog entries of ref, newest first.
 func reflog(repo *git.Repo, ref string, n int) ([]entry, error) {
 	out, err := repo.Output("log", "-g", "-n", strconv.Itoa(n), "--format=%H%x00%gs%x00%gt", ref, "--")
 	if err != nil {
@@ -101,6 +103,7 @@ func Events(repo *git.Repo, n int) ([]Event, error) {
 	return out, nil
 }
 
+// count returns how many non-merge commits are in the revision range rng, or 0 on error.
 func count(repo *git.Repo, rng string) int {
 	out, err := repo.Output("rev-list", "--count", "--no-merges", rng, "--")
 	if err != nil {
@@ -110,6 +113,7 @@ func count(repo *git.Repo, rng string) int {
 	return n
 }
 
+// describe sets e.Kind and e.Text from the reflog message in e.Raw.
 func describe(repo *git.Repo, e *Event) {
 	action, detail, _ := strings.Cut(e.Raw, ": ")
 	action = strings.TrimSpace(action)
