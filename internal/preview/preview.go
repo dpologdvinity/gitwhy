@@ -645,7 +645,11 @@ func push(repo *git.Repo, a danger.Args) Result {
 		dst = src
 	}
 	rref := "refs/remotes/" + remote + "/" + dst
-	r := Result{} // not Exact: the remote may have moved since the last fetch
+	r := Result{}  // not Exact: the remote may have moved since the last fetch
+	if src == "" { // "<remote> :<branch>" deletes the remote branch
+		r.add("Deletes %s on %s.", dst, remote)
+		return r
+	}
 	if !repo.OK("show-ref", "--verify", "-q", rref) {
 		r.add("Creates %s on %s.", dst, remote)
 		return r

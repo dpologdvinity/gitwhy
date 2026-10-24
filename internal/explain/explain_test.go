@@ -48,3 +48,26 @@ func TestExplain(t *testing.T) {
 		}
 	}
 }
+
+// TestRevisionReflogForms checks the reflog suffixes: "@{-1}" is the branch you were on before
+// (not "-1 moves ago"), "@{2}" is two moves ago, and a date like "@{yesterday}" is described as
+// that date, not as "yesterday moves ago".
+func TestRevisionReflogForms(t *testing.T) {
+	cases := map[string][]string{
+		"@{-1}":            {"branch you were on", "1 switch"},
+		"@{-2}":            {"branch you were on", "2 switches"},
+		"HEAD@{2}":         {"2 moves ago"},
+		"main@{yesterday}": {"yesterday", "reflog"},
+	}
+	for tok, wants := range cases {
+		got := Revision(nil, tok)
+		for _, w := range wants {
+			if !strings.Contains(got, w) {
+				t.Errorf("Revision(%q) = %q, want it to mention %q", tok, got, w)
+			}
+		}
+		if strings.Contains(got, "yesterday moves") || strings.Contains(got, "-1 moves") {
+			t.Errorf("Revision(%q) = %q is wrong", tok, got)
+		}
+	}
+}

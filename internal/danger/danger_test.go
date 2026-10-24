@@ -131,3 +131,19 @@ func TestWarningsInTreatsAPlainCheckoutArgumentAsAPath(t *testing.T) {
 		t.Errorf("nil repo: got %q, want none", got)
 	}
 }
+
+// TestFileNamedLikeASubcommandIsStillAFile checks that a word such as "set" or "add" is only read
+// as a subcommand for commands that have subcommands. `git checkout set` (a file called set) must
+// still be warned about as overwriting that file.
+func TestFileNamedLikeASubcommandIsStillAFile(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "set", "1\n", "add", "1\n")
+	for _, name := range []string{"set", "add"} {
+		if got := WarningsIn(r.Repo, []string{"checkout", name}); len(got) != 1 {
+			t.Errorf("checkout %s: got %q, want the overwrite warning", name, got)
+		}
+	}
+	if got := Warnings(strings.Fields("stash drop")); len(got) != 1 {
+		t.Errorf("stash drop: got %q, want 1 warning (stash still has subcommands)", got)
+	}
+}

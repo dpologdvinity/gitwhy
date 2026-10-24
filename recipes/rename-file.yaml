@@ -1,4 +1,5 @@
-# Renames or moves a tracked file with "git mv" and stages the rename for the next commit.
+# Renames or moves a tracked file with "git mv" and stages the rename for the next commit. The "--"
+# keeps a file name that starts with a dash from being read as an option.
 # Nothing is committed. gitwhy undo puts the file back under its old name.
 title: Rename or move a file
 aliases: [rename file, move file, git mv]
@@ -7,5 +8,5 @@ questions:
   - {id: from, ask: "Which file?", type: files, source: tracked}
   - {id: to, ask: "New path", type: text}
 steps:
-  - git: [mv, "{{.from}}", "{{.to}}"]
+  - git: [mv, --, "{{.from}}", "{{.to}}"]
 predict: "{{.from}} becomes {{.to}}, staged for the next commit."

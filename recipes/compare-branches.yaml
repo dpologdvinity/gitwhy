@@ -7,7 +7,7 @@ aliases: [compare branches, diff branches, what's different, branch difference, 
 category: inspect history
 questions:
   - {id: a, ask: "First branch", type: branch, source: all, default: "{{.branch}}"}
-  - {id: b, ask: "Second branch", type: branch, source: all, default: origin/master}
+  - {id: b, ask: "Second branch", type: branch, source: all, default: "{{.default_branch}}"}
 steps:
   - git: [log, --oneline, --left-right, --cherry-mark, "{{.a}}...{{.b}}"]
     note: "< = only on the first branch, > = only on the second, = = same change on both"

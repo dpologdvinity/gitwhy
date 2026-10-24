@@ -386,6 +386,9 @@ func pruneOrphans(r *git.Repo) {
 type Result struct {
 	Before  *Snapshot // the state just before the restore (undo it with Restore(Before))
 	Skipped []string  // plain-English notes about what was left alone
+	// HeadLeftAlone is true when HEAD, the index and the files were not restored because the
+	// branch HEAD goes back to was left alone. The undo is then only partly done.
+	HeadLeftAlone bool
 }
 
 // Restore puts the repository back to s. It snapshots the current state first, so the restore
@@ -489,6 +492,7 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	// 2-5. HEAD, files, index and operation state, unless the branch HEAD goes back to was left
 	// alone: old files under a newer commit, or a branch checked out twice, would be wrong.
 	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok && (skipped[ref] || elsewhere[ref]) {
+		res.HeadLeftAlone = true
 		res.Skipped = append(res.Skipped, "HEAD, the index and your files were left as they are, because "+shortRef(ref)+" was left as is")
 	} else if err := restoreCheckout(r, s, cur); err != nil {
 		return res, fmt.Errorf("%w\nThe undo is only partly done. Run \"gitwhy undo\" again to go back to how things were before it", err)

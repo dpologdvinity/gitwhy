@@ -17,6 +17,13 @@ type Args struct {
 	long  map[string]bool // long flags seen before "--", without any "=value"
 }
 
+// hasSubcommands lists the commands whose first word can be a subcommand ("stash drop"). For any
+// other command that word is an argument: a file called "set" in `git checkout set` is a file.
+var hasSubcommands = map[string]bool{
+	"stash": true, "lfs": true, "reflog": true, "worktree": true,
+	"remote": true, "sparse-checkout": true, "submodule": true,
+}
+
 // valueShort lists, per command, the short flags that take a value. In "-ekeep.env" the letters
 // after "e" are its value, not more flags, so Parse stops reading letters there. Without this,
 // the "n" in "keep.env" would look like -n (dry run) and "-bfix" would look like -f (force).
@@ -59,7 +66,7 @@ func Parse(args []string, subs map[string]bool) Args {
 					break // the rest of the word is this flag's value
 				}
 			}
-		case i == 0 && subs[w]:
+		case i == 0 && subs[w] && hasSubcommands[a.Cmd]:
 			a.Sub = w
 		}
 	}

@@ -254,3 +254,17 @@ func TestPreviewKeepsGlobsForUserTypedPaths(t *testing.T) {
 		t.Fatalf("Save = %q, want both .log files matched by the glob", got.Save)
 	}
 }
+
+// TestPushDeleteRefspecIsNotAnUpload checks that `git push origin :branch` (an empty source means
+// delete the remote branch) is not described as uploading commits.
+func TestPushDeleteRefspecIsNotAnUpload(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "a\n")
+	r.Git("remote", "add", "origin", "https://example.com/x.git")
+	r.Git("update-ref", "refs/remotes/origin/feat", "HEAD")
+	got := Preview(r.Repo, []string{"push", "origin", ":feat"})
+	s := text(got)
+	if got.Exact || strings.Contains(s, "uploaded") || strings.Contains(s, "Nothing new to upload") || !strings.Contains(s, "Deletes") {
+		t.Fatalf("a delete refspec should be described as a delete:\n%s", s)
+	}
+}

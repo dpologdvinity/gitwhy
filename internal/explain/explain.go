@@ -6,7 +6,9 @@
 package explain
 
 import (
+	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/dpologdvinity/gitwhy/internal/git"
@@ -147,7 +149,13 @@ func Revision(repo *git.Repo, tok string) string {
 		if strings.HasPrefix(tok, "stash@") {
 			return "stash number " + m[2] + " (0 = newest)"
 		}
-		return base + " as it was " + m[2] + " moves ago (from the reflog)"
+		if n, err := strconv.Atoi(m[2]); err == nil {
+			if n < 0 && m[1] == "" { // "@{-N}": the branch checked out N switches ago
+				return fmt.Sprintf("the branch you were on %d %s ago", -n, plural(-n, "switch", "switches"))
+			}
+			return base + " as it was " + m[2] + " moves ago (from the reflog)"
+		}
+		return base + " as it was " + m[2] + " (from the reflog)" // a date such as "yesterday"
 	}
 	if m := tildeRe.FindStringSubmatch(tok); m != nil && m[1] != "" {
 		n := m[2]
@@ -189,6 +197,14 @@ func Revision(repo *git.Repo, tok string) string {
 }
 
 // orHEAD returns s, or "HEAD" when s is empty, since git reads a missing side of a range as HEAD.
+// plural returns one when n is 1, else many.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
 func orHEAD(s string) string {
 	if s == "" {
 		return "HEAD"

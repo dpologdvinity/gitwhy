@@ -8,14 +8,30 @@ import (
 
 	"charm.land/huh/v2"
 
+	"github.com/dpologdvinity/gitwhy/internal/git"
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
 	"github.com/dpologdvinity/gitwhy/internal/todo"
 )
 
+// defaultBranch names the branch a recipe should preselect as "the main one": the remote's own
+// default (origin/HEAD), else origin/main, origin/master, or a local main or master. It returns ""
+// when none exists.
+func defaultBranch(r *git.Repo) string {
+	if ref, err := r.Output("symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"); err == nil && ref != "" {
+		return ref
+	}
+	for _, c := range []string{"refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"} {
+		if r.OK("show-ref", "--verify", "-q", c) {
+			return strings.TrimPrefix(strings.TrimPrefix(c, "refs/remotes/"), "refs/heads/")
+		}
+	}
+	return ""
+}
+
 // builtins returns the answers every recipe can use without asking: head (empty in a repository
 // with no commits), branch ("HEAD" when detached), upstream, remote (the branch's remote, else
-// origin, else the first remote), op (the operation in progress) and local_refs (every local
-// branch and tag ref).
+// origin, else the first remote), op (the operation in progress), local_refs (every local
+// branch and tag ref) and default_branch (see defaultBranch).
 func (a *App) builtins() recipe.Answers {
 	r := a.Repo
 	ans := recipe.Answers{}
@@ -38,6 +54,7 @@ func (a *App) builtins() recipe.Answers {
 		}
 	}
 	ans["remote"] = remote
+	ans["default_branch"] = defaultBranch(r)
 	ans["op"] = recipe.InProgress(r)
 	locals, _ := r.Output("for-each-ref", "--format=%(refname)", "refs/heads", "refs/tags")
 	ans["local_refs"] = strings.Fields(locals)
@@ -59,10 +76,16 @@ func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 	// Preset answers get the same derived answers (_base, _local, _from and so on) as asked ones.
 	for k, v := range preset {
 		ans[k] = v
-		if q := r.Question(k); q != nil && q.Type == "commit" {
-			a.deriveCommit(q.ID, v.(string), ans)
-		} else if q != nil && q.Type == "branch" {
-			a.deriveBranch(q.ID, v.(string), ans)
+		if q := r.Question(k); q != nil && (q.Type == "commit" || q.Type == "branch") {
+			text, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("the preset answer %q must be text, not %T", k, v)
+			}
+			if q.Type == "commit" {
+				a.deriveCommit(q.ID, text, ans)
+			} else {
+				a.deriveBranch(q.ID, text, ans)
+			}
 		} else if q != nil && q.Type == "files" {
 			a.deriveFiles(q.ID, v, ans)
 		}
@@ -311,6 +334,12 @@ func (a *App) deriveCommit(id, v string, ans recipe.Answers) {
 		ans[id+"_base"] = "--root"
 	}
 	files, _ := a.Repo.Output("diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "-z", v)
+	// A merge commit has a second parent. Recipes that reverse a commit need to know, because git
+	// wants a mainline parent for those.
+	ans[id+"_merge"] = ""
+	if a.Repo.OK("rev-parse", "-q", "--verify", v+"^2") {
+		ans[id+"_merge"] = "1"
+	}
 	ans[id+"_files"] = splitZ(files)
 	ans[id+"_pushed"] = a.pushed(v)
 }
