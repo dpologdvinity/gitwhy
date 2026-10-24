@@ -51,7 +51,7 @@ func TestPreThenUndo(t *testing.T) {
 	}
 	r.Git("reset", "--hard")
 	Post(r.Top, id)
-	s, err := snapshot.Get(r.Repo, id)
+	s, err := snapshot.Get(r.Repo, idOf(id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestPreSavesIgnoredFilesFromSubfolder(t *testing.T) {
 	}
 	r.Git("clean", "-fXq")
 	Post(sub, id)
-	s, err := snapshot.Get(r.Repo, id)
+	s, err := snapshot.Get(r.Repo, idOf(id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,5 +438,58 @@ func TestHookFunctionKeepsExitCodeUnderSetU(t *testing.T) {
 	out, _ := runShell(t, "bash", r.Top, "set -u\ngit rev-parse --short HEAD >/dev/null\necho rc=$?\n")
 	if !strings.Contains(out, "rc=0") || strings.Contains(out, "unbound") {
 		t.Fatalf("under set -u:\n%s", out)
+	}
+}
+
+// idOf returns the snapshot ID inside the token that Pre returns ("<id>@<repository top>").
+func idOf(token string) string {
+	id, _, _ := strings.Cut(token, "@")
+	return id
+}
+
+// TestPostFinishesTheSnapshotInTheRepoPreUsed checks that Post records the "after" state in the
+// repository Pre snapshotted even when the shell's folder is elsewhere, as with `git -C other
+// reset --hard`. Opening the repository at the shell's folder would silently skip it, and undo
+// would then also revert later work.
+func TestPostFinishesTheSnapshotInTheRepoPreUsed(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n")
+	r.Write("f.txt", "dirty\n")
+	elsewhere := t.TempDir() // the shell is not inside the repository
+	token := Pre(elsewhere, []string{"-C", r.Top, "reset", "--hard"})
+	if token == "" {
+		t.Fatal("Pre took no snapshot")
+	}
+	r.Git("reset", "--hard")
+	Post(elsewhere, token)
+	s, err := snapshot.Get(r.Repo, idOf(token))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.After == nil {
+		t.Fatal("Post did not finish the snapshot: undo would lack its after-state")
+	}
+}
+
+// TestCasePatternIsValidWithoutSafeCommands checks that the shell "case" pattern stays valid
+// shell even when there are no safe commands to list: a bare "|”" is a syntax error.
+func TestCasePatternIsValidWithoutSafeCommands(t *testing.T) {
+	if got := casePattern(nil); got != "''" {
+		t.Fatalf("casePattern(nil) = %q, want ''", got)
+	}
+	if got := casePattern([]string{"status", "log"}); got != "status|log|''" {
+		t.Fatalf("casePattern = %q", got)
+	}
+}
+
+// TestPreComposesRelativeDashCOptions checks that several -C options combine the way git does:
+// each relative one is taken relative to the previous one, so `-C sub -C ..` is the folder we
+// started in, not the parent of it.
+func TestPreComposesRelativeDashCOptions(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n", "sub/g.txt", "g\n")
+	r.Write("f.txt", "dirty\n")
+	if id := Pre(r.Top, []string{"-C", "sub", "-C", "..", "reset", "--hard"}); id == "" {
+		t.Fatal("Pre did not resolve `-C sub -C ..` to the repository")
 	}
 }

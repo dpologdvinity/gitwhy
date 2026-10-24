@@ -65,8 +65,11 @@ func splitGlobalOptions(cwd string, args []string) (dir string, rest []string, o
 				return "", nil, false
 			}
 			if args[i] == "-C" {
-				if dir = args[i+1]; !filepath.IsAbs(dir) {
-					dir = filepath.Join(cwd, dir)
+				// Like git, each relative -C is taken relative to the previous one.
+				if next := args[i+1]; filepath.IsAbs(next) {
+					dir = next
+				} else {
+					dir = filepath.Join(dir, next)
 				}
 			}
 			i += 2
@@ -100,8 +103,8 @@ func expandAlias(repo *git.Repo, args []string) []string {
 	return args
 }
 
-// Pre takes a snapshot before a risky command and returns its ID, or "" when it took none.
-// It never fails: the user's git command must run regardless. Global options in front of the
+// Pre takes a snapshot before a risky command and returns a token for Post ("<snapshot ID>@<the
+// repository's top folder>"), or "" when it took none. It never fails: the user's git command must run regardless. Global options in front of the
 // command (-C, -c, --no-pager) and simple git aliases are seen through.
 // cwd is the folder the user ran git in and args the words after "git". It returns "" when
 // GITWHY_HOOK_OFF=1, when splitGlobalOptions refuses the options (--git-dir, --work-tree,
@@ -132,13 +135,18 @@ func Pre(cwd string, args []string) string {
 	if err != nil {
 		return ""
 	}
-	return s.ID
+	return s.ID + "@" + r.Top
 }
 
-// Post records the state after the command ran, by finishing snapshot id so undo knows which
-// refs the command moved. Errors are ignored. It opens the repository at cwd; global options
-// such as "-C" are not passed to it.
-func Post(cwd, id string) {
+// Post records the state after the command ran, by finishing the snapshot named by token (as
+// returned by Pre) so undo knows which refs the command moved. Errors are ignored. The token
+// carries the repository's location, so this works even when the command ran with "git -C" from
+// another folder; a bare snapshot ID is looked up in the repository at cwd.
+func Post(cwd, token string) {
+	id, top, ok := strings.Cut(token, "@")
+	if ok && top != "" {
+		cwd = top
+	}
 	r, err := git.Open(cwd)
 	if err != nil {
 		return
@@ -150,10 +158,10 @@ func Post(cwd, id string) {
 
 // scriptFmt is the shell function that wraps git, for bash and zsh. It finds the command word,
 // skipping git's global options (and the next word after those in valueGlobal), and starts
-// gitwhy for every command word except the safe built-in commands in %[2]s and an empty one
-// (such as "git --version"). So commands with a danger rule and unknown words both reach
-// "gitwhy __pre": an unknown word may be a git alias for something risky, which gitwhy then
-// looks up. %[1]s, the list of commands with a rule, is passed by Script but not used.
+// gitwhy for every command word except the safe built-in commands in %s (a case pattern from
+// casePattern, which also matches an empty word such as in "git --version"). So commands with a
+// danger rule and unknown words both reach "gitwhy __pre": an unknown word may be a git alias for
+// something risky, which gitwhy then looks up.
 // "function git {" (not "git()") still parses when the user has aliased git. The variables are
 // initialised so "set -u" is safe. The real git always runs and its exit code is returned, even
 // when gitwhy is missing or fails; "gitwhy __post" runs only when __pre printed an ID.
@@ -168,7 +176,7 @@ const scriptFmt = `function git {
     esac
   done
   case "$__gw_sub" in
-    %[2]s|'') ;;
+    %s) ;;
     *) __gw_id=$(command gitwhy __pre "$@" 2>/dev/null) ;;
   esac
   command git "$@"
@@ -207,7 +215,13 @@ func Script(shell string) (string, error) {
 			safe = append(safe, c)
 		}
 	}
-	return fmt.Sprintf(scriptFmt, strings.Join(risky, "|"), strings.Join(safe, "|")), nil
+	return fmt.Sprintf(scriptFmt, casePattern(safe)), nil
+}
+
+// casePattern joins command names into a shell "case" pattern that also matches the empty word.
+// The empty word is always last, so the pattern stays valid shell even with no names at all.
+func casePattern(safe []string) string {
+	return strings.Join(append(slices.Clone(safe), "''"), "|")
 }
 
 // commandName matches a safe shell word for a git command name. Names are put into a shell
