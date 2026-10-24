@@ -79,6 +79,58 @@ func TestCommitKeyCommitsTheIndex(t *testing.T) {
 	}
 }
 
+// TestSpaceKeepsCursorOnFile is a regression test: staging a new file moves it up the list
+// (porcelain v2 lists untracked files last), and the cursor must follow the file, not stay on
+// its old row, so a second space unstages the same file.
+func TestSpaceKeepsCursorOnFile(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "z.txt", "z\n")
+	r.Write("z.txt", "edited\n")
+	r.Write("a.txt", "a\n")
+	r.Write("b.txt", "b\n")
+	m := &model{repo: r.Repo}
+	m.load()
+	m.key("down")
+	if m.files[m.cursor[tabChanges]].path != "a.txt" {
+		t.Fatalf("setup: cursor on %q, files %+v", m.files[m.cursor[tabChanges]].path, m.files)
+	}
+	m.key("space")
+	if f := m.files[m.cursor[tabChanges]]; f.path != "a.txt" || !f.staged() {
+		t.Fatalf("after staging, cursor on %+v (files %+v)", f, m.files)
+	}
+	m.key("space")
+	if st := r.Git("status", "--porcelain"); !strings.Contains(st, " M z.txt") || !strings.Contains(st, "?? a.txt") {
+		t.Fatalf("second space touched the wrong file:\n%s", st)
+	}
+}
+
+// TestReloadKeepsCursorOnBranch proves that a reload that reorders the Branches tab (it is
+// sorted by commit date) keeps the cursor on the same branch.
+func TestReloadKeepsCursorOnBranch(t *testing.T) {
+	r := testrepo.New(t)
+	at := func(date, msg string) {
+		r.Git("add", "-A")
+		if _, err := r.With("GIT_COMMITTER_DATE="+date).Output("commit", "-q", "--allow-empty", "-m", msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at("2000-01-01T00:00:00Z", "main one")
+	r.Git("switch", "-q", "-c", "feat")
+	at("2001-01-01T00:00:00Z", "feat one")
+	r.Git("switch", "-q", "main")
+	m := &model{repo: r.Repo, tab: tabBranches}
+	m.load()
+	m.key("down")
+	if b := m.brs[m.cursor[tabBranches]].name; b != "main" {
+		t.Fatalf("setup: cursor on %q (%+v)", b, m.brs)
+	}
+	at("2002-01-01T00:00:00Z", "main two") // main is now the newest: the list reorders
+	m.key("ctrl+r")
+	if b := m.brs[m.cursor[tabBranches]].name; b != "main" {
+		t.Fatalf("after reload cursor on %q (%+v)", b, m.brs)
+	}
+}
+
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")

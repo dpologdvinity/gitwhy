@@ -97,6 +97,14 @@ func Run(repo *git.Repo) (Action, error) {
 
 func (m *model) load() {
 	r := m.repo
+	// Both lists can reorder on reload: remember the selected file and branch by name.
+	var keepFile, keepBranch string
+	if i := m.cursor[tabChanges]; i < len(m.files) {
+		keepFile = m.files[i].path
+	}
+	if i := m.cursor[tabBranches]; i < len(m.brs) {
+		keepBranch = m.brs[i].name
+	}
 	m.op = recipe.InProgress(r)
 	out, _ := r.Output("status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
 	m.files, m.head, m.up, m.ab = nil, "", "", ""
@@ -144,6 +152,16 @@ func (m *model) load() {
 			}
 			name := strings.TrimPrefix(strings.TrimPrefix(f[0], "refs/heads/"), "refs/remotes/")
 			m.brs = append(m.brs, branch{name, f[1], f[2], f[3]})
+		}
+	}
+	for i, f := range m.files {
+		if f.path == keepFile {
+			m.cursor[tabChanges] = i
+		}
+	}
+	for i, b := range m.brs {
+		if b.name == keepBranch {
+			m.cursor[tabBranches] = i
 		}
 	}
 	for t := range m.cursor {
