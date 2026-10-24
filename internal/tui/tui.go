@@ -70,23 +70,24 @@ type branch struct {
 }
 
 type model struct {
-	repo   *git.Repo
-	w, h   int
-	tab    int
-	cursor [3]int
-	files  []file
-	rows   []graph.Row // Commits tab; the cursor counts commit rows only
-	all    bool        // Commits tab shows every branch
-	brs    []branch
-	head   string // branch name or "HEAD (detached)"
-	ab     string // "↑2 ↓1" vs upstream
-	up     string
-	op     string
-	help   bool
-	msg    string // one-line result of the last quick action
-	detail string
-	action Action
-	hunks  *hunkView // non-nil while zoomed into a file's hunks
+	repo    *git.Repo
+	w, h    int
+	tab     int
+	cursor  [3]int
+	files   []file
+	rows    []graph.Row // Commits tab; the cursor counts commit rows only
+	all     bool        // Commits tab shows every branch
+	brs     []branch
+	head    string // branch name or "HEAD (detached)", for display
+	headRef string // what git reads: the branch name, or "HEAD" when detached
+	ab      string // "↑2 ↓1" vs upstream
+	up      string
+	op      string
+	help    bool
+	msg     string // one-line result of the last quick action
+	detail  string
+	action  Action
+	hunks   *hunkView // non-nil while zoomed into a file's hunks
 }
 
 // Run shows the TUI and returns what the user chose.
@@ -140,8 +141,9 @@ func (m *model) load() {
 			m.files = append(m.files, file{x: '?', y: '?', path: e[2:]})
 		}
 	}
+	m.headRef = m.head
 	if m.head == "(detached)" {
-		m.head = "HEAD (detached)"
+		m.head, m.headRef = "HEAD (detached)", "HEAD"
 	}
 	// The graph walks all history when the repo has no commit-graph file: load it only when shown.
 	m.rows = nil
@@ -508,7 +510,7 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 		case "n":
 			return run("new-branch", recipe.Answers{"base": b}), true
 		case "c":
-			return run("compare-branches", recipe.Answers{"a": m.head, "b": b}), true
+			return run("compare-branches", recipe.Answers{"a": m.headRef, "b": b}), true
 		}
 	}
 	return Action{}, false

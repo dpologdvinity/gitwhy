@@ -189,6 +189,20 @@ func TestSwitchToRemoteBranchUsesShortName(t *testing.T) {
 	}
 }
 
+// TestCompareFromDetachedHead is a regression test: c on the Branches tab with a detached HEAD
+// must pass "HEAD", not the display label "HEAD (detached)", which git cannot read.
+func TestCompareFromDetachedHead(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Git("switch", "-q", "--detach")
+	m := &model{repo: r.Repo, tab: tabBranches}
+	m.load()
+	a, ok := m.tabKey("c", 0)
+	if !ok || a.Recipe != "compare-branches" || a.Preset["a"] != "HEAD" || a.Preset["b"] != "main" {
+		t.Fatalf("c = %+v", a)
+	}
+}
+
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
