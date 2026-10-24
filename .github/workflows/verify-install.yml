@@ -1,0 +1,83 @@
+name: verify-install
+# Installs the latest release the way the README says, from the real URLs, on real OSes.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+env:
+  GH_TOKEN: ${{ github.token }}
+jobs:
+  latest:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: echo "version=$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+
+  apt:
+    needs: latest
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          sudo install -d -m 0755 /etc/apt/keyrings
+          sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.asc -o /etc/apt/keyrings/gitwhy.asc
+          echo "deb [signed-by=/etc/apt/keyrings/gitwhy.asc] https://dpologdvinity.github.io/gitwhy/apt ./" | sudo tee /etc/apt/sources.list.d/gitwhy.list
+          sudo apt-get update && sudo apt-get install -y gitwhy
+          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+
+  dnf:
+    needs: latest
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - run: |
+          curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.repo -o /etc/yum.repos.d/gitwhy.repo
+          dnf install -y gitwhy
+          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+
+  npm:
+    needs: latest
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          npm install -g @kaitlynbassford/gitwhy
+          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+
+  brew:
+    needs: latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: |
+          [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install dpologdvinity/gitwhy/gitwhy
+          gitwhy version | grep -F "${{ needs.latest.outputs.version }}"
+
+  scoop:
+    needs: latest
+    runs-on: windows-latest
+    steps:
+      - shell: pwsh
+        run: |
+          iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
+          $env:PATH += ";$HOME\scoop\shims"
+          scoop bucket add gitwhy https://github.com/dpologdvinity/homebrew-gitwhy
+          scoop install gitwhy
+          gitwhy version | Select-String -SimpleMatch "${{ needs.latest.outputs.version }}"
+          if (-not $?) { throw "version mismatch" }
+
+  powershell:
+    needs: latest
+    runs-on: windows-latest
+    steps:
+      - shell: pwsh
+        run: |
+          irm https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.ps1 | iex
+          gitwhy version | Select-String -SimpleMatch "${{ needs.latest.outputs.version }}"
+          if (-not $?) { throw "version mismatch" }
