@@ -8,6 +8,11 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/kb"
 )
 
+// TestExplain runs Explain against the real embedded docs (no repo) and checks that each command
+// splits into the expected number of parts, that every part has a documented meaning, and that
+// key parts mean the right thing: revision suffixes, a flag's separate value, "--", stash
+// reflog syntax, a "--no-" flag and the "bisect run" test command. A wrong part count means a
+// flag's value or a combined short flag was split the wrong way.
 func TestExplain(t *testing.T) {
 	k, err := kb.Load(os.DirFS("../.."))
 	if err != nil {

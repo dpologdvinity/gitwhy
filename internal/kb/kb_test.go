@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// load parses the real docs at the repository root.
 func load(t *testing.T) *KB {
 	t.Helper()
 	k, err := Load(os.DirFS("../.."))
@@ -14,6 +15,8 @@ func load(t *testing.T) *KB {
 	return k
 }
 
+// TestLoadRealDocs proves that every real command file parses with a summary and that the
+// shared option pages are read.
 func TestLoadRealDocs(t *testing.T) {
 	k := load(t)
 	if n := len(k.Commands); n < 180 {
@@ -30,6 +33,8 @@ func TestLoadRealDocs(t *testing.T) {
 	}
 }
 
+// TestLookup proves that Lookup finds flags in a command's own table, its shared pages and its
+// subcommands, including "--flag=value" forms.
 func TestLookup(t *testing.T) {
 	k := load(t)
 	cases := []struct{ cmd, sub, arg string }{
@@ -53,6 +58,8 @@ func TestLookup(t *testing.T) {
 	}
 }
 
+// TestParseFlagForms proves that parseFlag reads negatable, valued and optional-value flag
+// spellings.
 func TestParseFlagForms(t *testing.T) {
 	f, ok := parseFlag("`--[no-]verify`", "x")
 	if !ok || len(f.Spellings) != 2 || f.Spellings[0] != "--verify" || f.Spellings[1] != "--no-verify" {
@@ -69,5 +76,24 @@ func TestParseFlagForms(t *testing.T) {
 	f, _ = parseFlag("`--color[=<when>]`", "x")
 	if f.Spellings[0] != "--color" || f.Value != "<when>" || !f.Optional {
 		t.Errorf("optional: %+v", f)
+	}
+}
+
+// TestSharedLinksOnOneLine proves that a line linking two shared option pages records both,
+// so "git log -p" finds the diff options and "git format-patch" keeps the revision options.
+func TestSharedLinksOnOneLine(t *testing.T) {
+	k := load(t)
+	for _, name := range []string{"log", "show", "whatchanged", "gitk", "format-patch"} {
+		c := k.Commands[name]
+		if c == nil {
+			t.Errorf("%s: missing", name)
+			continue
+		}
+		if !contains(c.Shared, "diff-options") || !contains(c.Shared, "revision-options") {
+			t.Errorf("%s: shared = %v, want both diff-options and revision-options", name, c.Shared)
+		}
+	}
+	if _, ok := k.Lookup("log", "", "-p"); !ok {
+		t.Error("Lookup(log -p) not found")
 	}
 }
