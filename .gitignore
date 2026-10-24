@@ -5,3 +5,4 @@
 /npm/LICENSE
 /npm/README.md
 /npm/*.tgz
+.env
