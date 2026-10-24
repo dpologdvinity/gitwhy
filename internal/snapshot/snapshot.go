@@ -3,8 +3,10 @@
 // A snapshot holds every ref and HEAD, a byte copy of the index, a commit of the whole working
 // tree (tracked + untracked, not ignored), the state files of an in-progress merge/rebase/etc.,
 // sparse-checkout settings, and the stash list. It lives in <gitdir>/gitwhy/snapshots/<id>/. The
-// working-tree commit, whose parents are every local branch tip, HEAD and stash entry, is kept
-// alive by refs/gitwhy/snapshots/<id>, so gc can't delete what undo needs.
+// working-tree commit is kept alive by refs/gitwhy/snapshots/<id>. Its parents are every commit
+// HEAD, a ref (branches, tags, remote-tracking branches) or a stash entry points to, with tags
+// peeled to their commit. Other objects refs point to, such as annotated tag objects, are kept
+// alive by refs/gitwhy/snapshots/<id>-<object ID>. So gc can't delete what undo needs.
 package snapshot
 
 import (
@@ -139,7 +141,9 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	}
 	os.Remove(tmpIdx)
 
-	// Parents pin every local branch tip, HEAD and stash commit, so gc can't delete them.
+	// Keep alive everything HEAD, the refs and the stash point to, so gc can't delete it: commits
+	// (and the commits tags point to) become parents of the working-tree commit, and other
+	// objects, such as annotated tags, get a ref of their own.
 	args := []string{"commit-tree", tree, "-m", "gitwhy snapshot: " + label}
 	var ids []string
 	if !strings.HasPrefix(s.Head, "ref: ") {
@@ -151,26 +155,25 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if strings.HasPrefix(n, "refs/heads/") {
-			ids = append(ids, s.Refs[n])
-		}
+		ids = append(ids, s.Refs[n])
 	}
 	for _, st := range s.Stashes {
 		ids = append(ids, st.Commit)
 	}
-	types := objectTypes(r, ids)
-	seen := map[string]bool{}
-	for _, id := range ids {
-		if !seen[id] && types[id] == "commit" {
-			seen[id] = true
-			args = append(args, "-p", id)
-		}
+	commits, others := pins(r, ids)
+	for _, id := range commits {
+		args = append(args, "-p", id)
 	}
 	s.Work, err = r.With(commitEnv...).Output(args...)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.Output("update-ref", refPrefix+s.ID, s.Work); err != nil {
+	var tx strings.Builder
+	fmt.Fprintf(&tx, "update %s %s\n", refPrefix+s.ID, s.Work)
+	for _, id := range others {
+		fmt.Fprintf(&tx, "update %s-%s %s\n", refPrefix+s.ID, id, id)
+	}
+	if _, err := r.OutputIn(strings.NewReader(tx.String()), "update-ref", "--stdin"); err != nil {
 		return nil, err
 	}
 
@@ -269,10 +272,24 @@ func read(dir string) (*Snapshot, error) {
 	return &s, nil
 }
 
-// Delete removes a snapshot and its ref.
+// Delete removes a snapshot and the refs that keep its objects alive.
 func Delete(r *git.Repo, s *Snapshot) {
-	r.Output("update-ref", "-d", refPrefix+s.ID)
+	deleteRefs(r, s.ID)
 	os.RemoveAll(s.dir)
+}
+
+// deleteRefs removes refs/gitwhy/snapshots/<id> and the extra refs Take made for that ID.
+func deleteRefs(r *git.Repo, id string) {
+	out, _ := r.Output("for-each-ref", "--format=%(refname)", refPrefix)
+	var tx strings.Builder
+	for _, name := range strings.Split(out, "\n") {
+		if name == refPrefix+id || strings.HasPrefix(name, refPrefix+id+"-") {
+			fmt.Fprintf(&tx, "delete %s\n", name)
+		}
+	}
+	if tx.Len() > 0 {
+		r.OutputIn(strings.NewReader(tx.String()), "update-ref", "--stdin")
+	}
 }
 
 func prune(r *git.Repo, keep string) {
@@ -484,20 +501,39 @@ func missingObjects(r *git.Repo, s *Snapshot) map[string]bool {
 	return m
 }
 
-// objectTypes returns the type of each object ("commit", "tag", ...) with one git process.
-// Missing objects are left out.
-func objectTypes(r *git.Repo, ids []string) map[string]string {
-	m := map[string]string{}
-	if len(ids) == 0 {
-		return m
-	}
-	out, _ := r.OutputIn(strings.NewReader(strings.Join(ids, "\n")+"\n"), "cat-file", "--batch-check=%(objectname) %(objecttype)")
-	for _, line := range strings.Split(out, "\n") {
-		if id, typ, ok := strings.Cut(line, " "); ok && typ != "missing" {
-			m[id] = typ
+// pins sorts objects to keep alive, with one git process: commits (including the commit each tag
+// points to) can be parents of the working-tree commit; other objects, such as annotated tags,
+// need a ref of their own. Missing objects and repeats are left out.
+func pins(r *git.Repo, ids []string) (commits, others []string) {
+	var in strings.Builder
+	var uniq []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			uniq = append(uniq, id)
+			fmt.Fprintf(&in, "%s\n%s^{commit}\n", id, id)
 		}
 	}
-	return m
+	if len(uniq) == 0 {
+		return nil, nil
+	}
+	out, _ := r.OutputIn(strings.NewReader(in.String()), "cat-file", "--batch-check=%(objectname) %(objecttype)")
+	lines := strings.Split(out, "\n")
+	parent := map[string]bool{}
+	for i, id := range uniq {
+		if 2*i+1 >= len(lines) {
+			break
+		}
+		if typ := strings.TrimPrefix(lines[2*i], id+" "); typ != "missing" && typ != "commit" {
+			others = append(others, id)
+		}
+		if c, typ, _ := strings.Cut(lines[2*i+1], " "); typ == "commit" && !parent[c] {
+			parent[c] = true
+			commits = append(commits, c)
+		}
+	}
+	return commits, others
 }
 
 // checkedOutElsewhere lists branches checked out in other worktrees.

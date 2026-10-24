@@ -395,6 +395,45 @@ func TestRestoreManyHiddenFilesIsFast(t *testing.T) {
 	}
 }
 
+// TestTagsAndRemoteRefsSurviveGC proves a snapshot keeps alive what tags (including annotated
+// tag objects) and remote-tracking branches point to, so gc can't break their undo.
+func TestTagsAndRemoteRefsSurviveGC(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	tree := r.Git("rev-parse", "HEAD^{tree}")
+	tagged := r.Git("commit-tree", tree, "-p", "HEAD", "-m", "only tagged")
+	r.Git("tag", "-a", "v1", "-m", "release", tagged)
+	tagObj := r.Git("rev-parse", "refs/tags/v1")
+	remote := r.Git("commit-tree", tree, "-p", "HEAD", "-m", "only on the remote")
+	r.Git("update-ref", "refs/remotes/origin/x", remote)
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("tag", "-d", "v1")
+	r.Git("update-ref", "-d", "refs/remotes/origin/x")
+	r.Git("gc", "-q", "--prune=now")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Skipped) != 0 {
+		t.Errorf("skipped = %q", res.Skipped)
+	}
+	if got, _ := r.Output("rev-parse", "refs/tags/v1"); got != tagObj {
+		t.Errorf("v1 = %q, want tag object %s", got, tagObj)
+	}
+	if got, _ := r.Output("rev-parse", "refs/remotes/origin/x"); got != remote {
+		t.Errorf("origin/x = %q, want %s", got, remote)
+	}
+	// Deleting the snapshot removes everything that pinned it.
+	Delete(r.Repo, s)
+	Delete(r.Repo, res.Before)
+	if pins := r.Git("for-each-ref", "refs/gitwhy/"); pins != "" {
+		t.Errorf("refs left after Delete:\n%s", pins)
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()
