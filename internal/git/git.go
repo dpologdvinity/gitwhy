@@ -15,17 +15,18 @@ import (
 
 // Runner runs git in Dir with extra environment variables.
 type Runner struct {
-	Dir string
-	Env []string
+	Dir string   // folder git runs in
+	Env []string // extra "KEY=value" variables, added after the defaults so they win
 }
 
 // Error is a failed git command with its stderr.
 type Error struct {
-	Args   []string
-	Stderr string
-	Err    error
+	Args   []string // the arguments after "git"
+	Stderr string   // what git printed to stderr
+	Err    error    // the underlying error, usually an *exec.ExitError
 }
 
+// Error returns "git <args>: <message>", where the message is stderr if git printed any.
 func (e *Error) Error() string {
 	msg := strings.TrimSpace(e.Stderr)
 	if msg == "" {
@@ -34,14 +35,37 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("git %s: %s", strings.Join(e.Args, " "), msg)
 }
 
+// Unwrap returns the underlying error, so errors.As can find an *exec.ExitError.
 func (e *Error) Unwrap() error { return e.Err }
 
+// cmd builds the git command for args, with the environment every git process gets.
 func (r Runner) cmd(args ...string) *exec.Cmd {
 	c := exec.Command("git", args...)
 	c.Dir = r.Dir
-	// Stable, parseable output regardless of the user's locale.
-	c.Env = append(append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0"), r.Env...)
+	// Stable, parseable output regardless of the user's locale. File names are literal pathspecs,
+	// so "[ab].txt" never matches a.txt; git refuses literal mixed with the other global settings.
+	// git stash runs "git clean ... :/" itself, which literal pathspecs break, so stash keeps
+	// git's normal pathspecs.
+	literal := "1"
+	if subcommand(args) == "stash" {
+		literal = "0"
+	}
+	c.Env = append(append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS="+literal,
+		"GIT_GLOB_PATHSPECS=0", "GIT_NOGLOB_PATHSPECS=0", "GIT_ICASE_PATHSPECS=0"), r.Env...)
 	return c
+}
+
+// subcommand returns the git subcommand in args, skipping global options such as "-c k=v".
+func subcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-c" || a == "-C":
+			i++ // the option's value
+		case !strings.HasPrefix(a, "-"):
+			return a
+		}
+	}
+	return ""
 }
 
 // With returns a copy of r with extra environment variables.
@@ -66,6 +90,28 @@ func (r Runner) OutputIn(stdin io.Reader, args ...string) (string, error) {
 		return out.String(), &Error{Args: args, Stderr: errb.String(), Err: err}
 	}
 	return out.String(), nil
+}
+
+// Stream runs git with stdin and hands stdout to read as it arrives, so large output is never
+// held in memory. Whatever read leaves unread is discarded.
+func (r Runner) Stream(stdin io.Reader, read func(stdout io.Reader) error, args ...string) error {
+	c := r.cmd(args...)
+	c.Stdin = stdin
+	var errb bytes.Buffer
+	c.Stderr = &errb
+	out, err := c.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := c.Start(); err != nil {
+		return &Error{Args: args, Err: err}
+	}
+	rerr := read(out)
+	_, _ = io.Copy(io.Discard, out) // let git finish writing
+	if err := c.Wait(); err != nil {
+		return &Error{Args: args, Stderr: errb.String(), Err: err}
+	}
+	return rerr
 }
 
 // OK reports whether git exits 0.
@@ -96,6 +142,7 @@ func ExitCode(err error) int {
 	return -1
 }
 
+// versionRe finds "major.minor" in the output of "git version".
 var versionRe = regexp.MustCompile(`(\d+)\.(\d+)`)
 
 // Version returns git's major and minor version.
