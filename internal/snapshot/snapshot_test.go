@@ -825,3 +825,48 @@ func TestTakeManyBranchesIsFast(t *testing.T) {
 		t.Errorf("work commit has %d parents, want 401 (every branch tip)", len(parents))
 	}
 }
+
+// TestRestoreReportsWhenHeadWasLeftAlone proves that Result says so when HEAD, the index and the
+// files were not restored because their branch moved after the action. The CLI uses this to keep
+// the undo point instead of deleting it, so the undo can be tried again later.
+func TestRestoreReportsWhenHeadWasLeftAlone(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Commit("two", "a.txt", "2\n")
+	s, err := Take(r.Repo, "git reset --hard HEAD~1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("reset", "-q", "--hard", "HEAD~1")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	r.Commit("later", "b.txt", "b\n")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.HeadLeftAlone {
+		t.Error("HeadLeftAlone = false, want true when the branch HEAD is on moved after the action")
+	}
+
+	// A normal restore reports false.
+	r2 := testrepo.New(t)
+	r2.Commit("one", "a.txt", "1\n")
+	r2.Commit("two", "a.txt", "2\n")
+	s2, err := Take(r2.Repo, "git reset --hard HEAD~1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2.Git("reset", "-q", "--hard", "HEAD~1")
+	if err := Finish(r2.Repo, s2); err != nil {
+		t.Fatal(err)
+	}
+	res2, err := Restore(r2.Repo, s2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.HeadLeftAlone {
+		t.Error("HeadLeftAlone = true after a complete restore")
+	}
+}

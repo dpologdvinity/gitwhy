@@ -360,6 +360,12 @@ func (a *App) Undo(pick bool) error {
 	say("Go back to just before %s (%s).", cmdStyle.Render(s.Label), recover.Ago(s.Time))
 	say("%s", dimStyle.Render("Branches, HEAD, staged and unstaged changes, untracked files and stashes are put back."))
 	say("%s", dimStyle.Render("Anything sent to a remote (push) is not undone."))
+	if s.After == nil {
+		// Without the refs recorded after the command, undo cannot tell the command's changes from
+		// yours, so it puts every branch back, including work done since. This happens when the
+		// shell hook was interrupted before it could record them.
+		warn("gitwhy couldn't record what this command changed (it was interrupted), so undo puts every branch back, including anything you did since.")
+	}
 	ok, err := Confirm("Undo it?", true)
 	if err != nil || !ok {
 		return err
@@ -370,6 +376,13 @@ func (a *App) Undo(pick bool) error {
 	}
 	for _, note := range res.Skipped {
 		warn(note)
+	}
+	if res.HeadLeftAlone {
+		// Only part of the undo happened, so this undo point is not used up: keep it, and say how
+		// to use it again once the branch it needs is back where it was.
+		say("%s Part of the undo was left alone (see above). This undo point is kept; choose it again with %s.",
+			okStyle.Render("✓ Partly undone."), cmdStyle.Render("gitwhy undo --list"))
+		return nil
 	}
 	// The restored snapshot is used up. The one Restore took of the state before this undo is
 	// now the newest, so the next undo redoes the change.
