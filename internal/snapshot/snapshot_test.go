@@ -15,6 +15,8 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// setup makes a repo with two commits, a second branch, staged, unstaged, untracked and ignored
+// changes, and a stash.
 func setup(t *testing.T) *testrepo.Repo {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "a1\n", "dir/b.txt", "b1\n", ".gitignore", "*.log\n")
@@ -32,6 +34,8 @@ func setup(t *testing.T) *testrepo.Repo {
 	return r
 }
 
+// TestRoundTripDestructive proves Restore brings back refs, index, files, untracked and ignored
+// files and stashes after a hard reset, clean, stash drop and branch changes.
 func TestRoundTripDestructive(t *testing.T) {
 	r := setup(t)
 	before := r.State()
@@ -64,6 +68,7 @@ func TestRoundTripDestructive(t *testing.T) {
 	}
 }
 
+// TestUndoTheUndo proves restoring Result.Before returns to the state before the undo.
 func TestUndoTheUndo(t *testing.T) {
 	r := setup(t)
 	s, err := Take(r.Repo, "test", nil)
@@ -84,6 +89,8 @@ func TestUndoTheUndo(t *testing.T) {
 	}
 }
 
+// TestConflictStateRestored proves a merge in progress, with its conflict stages, comes back
+// after "merge --abort".
 func TestConflictStateRestored(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "base\n")
@@ -111,6 +118,7 @@ func TestConflictStateRestored(t *testing.T) {
 	}
 }
 
+// TestExtraIgnoredFiles proves ignored files passed to Take come back after "clean -x".
 func TestExtraIgnoredFiles(t *testing.T) {
 	r := setup(t)
 	s, err := Take(r.Repo, "clean -x", []string{"debug.log"})
@@ -126,6 +134,8 @@ func TestExtraIgnoredFiles(t *testing.T) {
 	}
 }
 
+// TestEmptyRepoAndPrune proves only Keep snapshots are kept, and that snapshots work in a repo
+// with no commits yet.
 func TestEmptyRepoAndPrune(t *testing.T) {
 	r := testrepo.New(t)
 	r.Write("x.txt", "x\n")
@@ -147,6 +157,8 @@ func TestEmptyRepoAndPrune(t *testing.T) {
 	}
 }
 
+// TestNestedRepoAndSubmoduleUntouched proves restore never changes or deletes a nested
+// repository inside the working tree.
 func TestNestedRepoAndSubmoduleUntouched(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "a\n")
@@ -183,6 +195,7 @@ func TestNestedRepoAndSubmoduleUntouched(t *testing.T) {
 	}
 }
 
+// TestSymrefOriginHead proves undo of a fetch keeps origin/HEAD a symbolic ref.
 func TestSymrefOriginHead(t *testing.T) {
 	up := testrepo.New(t)
 	up.Commit("one", "a.txt", "1\n")
@@ -208,6 +221,8 @@ func TestSymrefOriginHead(t *testing.T) {
 	}
 }
 
+// TestRestoreOldestDoesntPruneItself proves restoring the oldest of Keep snapshots works, even
+// though the snapshot taken first would push it out.
 func TestRestoreOldestDoesntPruneItself(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -227,6 +242,8 @@ func TestRestoreOldestDoesntPruneItself(t *testing.T) {
 	}
 }
 
+// TestIgnoredFileOverwriteIsSaved proves a file that became ignored and that undo overwrites
+// comes back with undo of the undo.
 func TestIgnoredFileOverwriteIsSaved(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -252,6 +269,8 @@ func TestIgnoredFileOverwriteIsSaved(t *testing.T) {
 	}
 }
 
+// TestRefsChangedLaterAreLeftAlone proves undo reverts only refs still where Finish saw them, and
+// reports the others.
 func TestRefsChangedLaterAreLeftAlone(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -289,6 +308,8 @@ func TestRefsChangedLaterAreLeftAlone(t *testing.T) {
 	}
 }
 
+// TestSparseCheckoutUndo proves undo of "sparse-checkout set" brings the hidden files back and
+// leaves a clean status.
 func TestSparseCheckoutUndo(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "d1/x", "x\n", "d2/y", "y\n")
@@ -311,6 +332,7 @@ func TestSparseCheckoutUndo(t *testing.T) {
 	}
 }
 
+// TestLFSFilesRoundTrip proves Git LFS files come back with their content, not the pointer.
 func TestLFSFilesRoundTrip(t *testing.T) {
 	if _, err := (git.Runner{}).Output("lfs", "version"); err != nil {
 		t.Skip("git-lfs not installed")
@@ -347,6 +369,7 @@ func TestLFSFilesRoundTrip(t *testing.T) {
 	}
 }
 
+// TestAutoCRLFRoundTrip proves CRLF line endings survive with core.autocrlf=true.
 func TestAutoCRLFRoundTrip(t *testing.T) {
 	r := testrepo.New(t)
 	r.Git("config", "core.autocrlf", "true")

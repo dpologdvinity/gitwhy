@@ -28,6 +28,8 @@ import (
 // Keep is how many snapshots are kept per worktree.
 const Keep = 20
 
+// refPrefix starts the refs that keep each snapshot's objects alive. The refs are shared by
+// every worktree; the snapshot folders are not.
 const refPrefix = "refs/gitwhy/snapshots/"
 
 // stateFiles are the per-worktree files that describe an operation in progress.
@@ -47,18 +49,18 @@ var sparseKeys = []string{"core.sparseCheckout", "core.sparseCheckoutCone", "ind
 // Stash is one stash entry.
 type Stash struct {
 	Commit  string `json:"commit"`
-	Message string `json:"message"`
+	Message string `json:"message"` // the reflog subject, e.g. "On main: my wip"
 }
 
 // Snapshot describes one saved state.
 type Snapshot struct {
-	ID      string            `json:"id"`
+	ID      string            `json:"id"` // base-36 creation time in nanoseconds; also the folder name
 	Time    time.Time         `json:"time"`
-	Label   string            `json:"label"` // what was about to run, e.g. "git reset --hard HEAD~1"
-	Head    string            `json:"head"`  // "ref: refs/heads/x" or a commit ID
-	Refs    map[string]string `json:"refs"`  // refname -> object ID (no symrefs, refs/gitwhy, refs/stash)
-	Work    string            `json:"work"`  // commit of the working tree
-	Stashes []Stash           `json:"stashes"`
+	Label   string            `json:"label"`    // what was about to run, e.g. "git reset --hard HEAD~1"
+	Head    string            `json:"head"`     // "ref: refs/heads/x" or a commit ID
+	Refs    map[string]string `json:"refs"`     // refname -> object ID (no symrefs, refs/gitwhy, refs/stash)
+	Work    string            `json:"work"`     // commit of the working tree
+	Stashes []Stash           `json:"stashes"`  // newest first
 	State   []string          `json:"state"`    // state files that existed
 	HasIdx  bool              `json:"hasIndex"` // whether .git/index existed
 	Sparse  map[string]string `json:"sparse"`   // sparse config key -> value ("" = unset)
@@ -69,9 +71,10 @@ type Snapshot struct {
 	// Stash list right after the command ran (see Finish). Undo keeps stashes made after that.
 	StashesAfter []Stash `json:"stashesAfter,omitempty"`
 
-	dir string
+	dir string // the snapshot's folder
 }
 
+// root returns the folder holding this worktree's snapshots.
 func root(r *git.Repo) string { return filepath.Join(r.GitDir, "gitwhy", "snapshots") }
 
 // Take saves the current state. extra lists ignored paths to include because the next command
@@ -84,6 +87,8 @@ func Take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	return s, err
 }
 
+// take saves the current state like Take, without pruning old snapshots. If it fails, the
+// snapshot's folder is removed.
 func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	if _, err := os.Stat(filepath.Join(r.GitDir, "index.lock")); err == nil {
 		return nil, errors.New("another git process is running (.git/index.lock exists)")
@@ -229,6 +234,7 @@ var commitEnv = []string{
 	"GIT_COMMITTER_NAME=gitwhy", "GIT_COMMITTER_EMAIL=gitwhy@localhost",
 }
 
+// save writes meta.json through a temporary file, so a crash never leaves half a file.
 func (s *Snapshot) save() error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -268,6 +274,7 @@ func Get(r *git.Repo, id string) (*Snapshot, error) {
 	return read(filepath.Join(root(r), id))
 }
 
+// read loads the snapshot saved in dir.
 func read(dir string) (*Snapshot, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	if err != nil {
@@ -303,6 +310,8 @@ func deleteRefs(r *git.Repo, id string) error {
 	return updateRefs(r, tx.String())
 }
 
+// prune deletes all but the newest Keep snapshots, never the one with ID keep, then removes
+// orphans (see pruneOrphans).
 func prune(r *git.Repo, keep string) {
 	all, err := List(r)
 	if err != nil {
@@ -373,14 +382,16 @@ func pruneOrphans(r *git.Repo) {
 	_ = updateRefs(r, tx.String()) // best effort: the next prune tries again
 }
 
-// Result of a restore.
+// Result is what a restore did.
 type Result struct {
 	Before  *Snapshot // the state just before the restore (undo it with Restore(Before))
 	Skipped []string  // plain-English notes about what was left alone
 }
 
 // Restore puts the repository back to s. It snapshots the current state first, so the restore
-// itself can be undone. Refs changed since the command ran are left alone and reported.
+// itself can be undone. Refs changed since the command ran, and stashes made since, are left
+// alone and reported. If the branch HEAD goes back to is left alone, HEAD, the index and the
+// files are too.
 func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	res := &Result{}
 
@@ -592,6 +603,7 @@ func updateRefs(r *git.Repo, tx string) error {
 	return err
 }
 
+// shortRef turns a ref name into the name people use: "main", "origin/main" or "tag v1".
 func shortRef(name string) string {
 	for _, p := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
 		if s, ok := strings.CutPrefix(name, p); ok {
@@ -676,11 +688,12 @@ func checkedOutElsewhere(r *git.Repo) map[string]bool {
 
 // change is one entry of "git diff-tree -r --raw".
 type change struct {
-	oldMode, newMode string
-	status           byte
-	path             string
+	oldMode, newMode string // file modes, such as "100644", or gitlink
+	status           byte   // 'A' added, 'D' deleted, 'M' changed, 'T' type changed (from a to b)
+	path             string // relative to the repository root, with forward slashes
 }
 
+// diffRaw lists the files that differ between the trees of commits a and b.
 func diffRaw(r *git.Repo, a, b string) ([]change, error) {
 	out, err := r.Output("diff-tree", "-r", "-z", "--no-renames", a, b)
 	if err != nil {
@@ -698,8 +711,10 @@ func diffRaw(r *git.Repo, a, b string) ([]change, error) {
 	return cs, nil
 }
 
-const gitlink = "160000" // a submodule or nested repository: never touched by restore
+// gitlink is the file mode of a submodule or nested repository: never touched by restore.
+const gitlink = "160000"
 
+// isGitlink reports whether a change is to a submodule or nested repository.
 func isGitlink(c change) bool { return c.oldMode == gitlink || c.newMode == gitlink }
 
 // hasRepo reports whether a path is or contains a nested repository.
@@ -761,6 +776,9 @@ func overwrittenUnsaved(r *git.Repo, want, have string) []string {
 	return out
 }
 
+// restoreFiles makes the working files match commit want, given that commit have holds them as
+// they are now: files added since are deleted, the others are written from want. Nested
+// repositories are never touched.
 func restoreFiles(r *git.Repo, want, have string) error {
 	cs, err := diffRaw(r, want, have)
 	if err != nil {
@@ -856,6 +874,7 @@ func restoreMissing(r *git.Repo, s *Snapshot) error {
 	return checkout(r, s.Work, paths)
 }
 
+// readHead returns "ref: <branch ref>", or the commit ID if HEAD is detached.
 func readHead(r *git.Repo) (string, error) {
 	if ref, err := r.Output("symbolic-ref", "-q", "HEAD"); err == nil {
 		return "ref: " + ref, nil
@@ -881,6 +900,7 @@ func refs(r *git.Repo) (map[string]string, error) {
 	return m, nil
 }
 
+// stashes returns the stash list, newest first.
 func stashes(r *git.Repo) ([]Stash, error) {
 	if !r.OK("rev-parse", "--verify", "-q", "refs/stash") {
 		return nil, nil
@@ -898,6 +918,7 @@ func stashes(r *git.Repo) ([]Stash, error) {
 	return st, nil
 }
 
+// sameStashes reports whether two stash lists hold the same commits in the same order.
 func sameStashes(a, b []Stash) bool {
 	if len(a) != len(b) {
 		return false
@@ -910,6 +931,7 @@ func sameStashes(a, b []Stash) bool {
 	return true
 }
 
+// removeEmptyParents removes dir and its parents while they are empty, stopping at top.
 func removeEmptyParents(top, dir string) {
 	for dir != top && strings.HasPrefix(dir, top) {
 		if os.Remove(dir) != nil {
@@ -919,6 +941,7 @@ func removeEmptyParents(top, dir string) {
 	}
 }
 
+// copyIfExists copies the file or folder src to dst if src exists, and reports whether it did.
 func copyIfExists(src, dst string) (bool, error) {
 	if _, err := os.Lstat(src); err != nil {
 		return false, nil
@@ -926,6 +949,7 @@ func copyIfExists(src, dst string) (bool, error) {
 	return true, copyAll(src, dst)
 }
 
+// copyFile copies the file src to dst, creating dst's folder if needed.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -946,6 +970,7 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
+// copyAll copies the file or folder src to dst, with everything inside it.
 func copyAll(src, dst string) error {
 	return filepath.Walk(src, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
