@@ -1,4 +1,8 @@
 'use strict';
+/**
+ * @file Tests for lib.js. Run with `node --test npm/lib.test.js` (CI does, on Linux and Windows).
+ * No network: the download test uses a local server that never answers.
+ */
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
@@ -80,6 +84,7 @@ const { get } = require('./lib');
 
 test('get gives up with a clear error when the server never answers', async () => {
   // A TCP server that accepts the connection and then says nothing, like a stalled network.
+  // The TLS handshake never finishes, so only get's idle timeout can end the request.
   const server = net.createServer(() => {});
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url = `https://127.0.0.1:${server.address().port}/x`;

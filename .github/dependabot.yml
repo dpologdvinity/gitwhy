@@ -7,7 +7,7 @@
 version: 2
 updates:
   # Go modules (go.mod / go.sum). If go.mod or go.sum changes, flake.nix's vendorHash goes stale and
-  # the Nix build in CI fails: refresh it as CONTRIBUTING.md describes.
+  # the Nix build in CI fails: refresh it as the comment above vendorHash in flake.nix describes.
   - package-ecosystem: gomod
     directory: /
     schedule:

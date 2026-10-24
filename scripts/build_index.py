@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
-"""Build gitwhy/docs/README.md: every command grouped by git's own categories, with its one-line summary."""
+"""Build docs/README.md: every command grouped by git's own categories, with its one-line summary.
+
+Usage: python3 scripts/build_index.py  (no arguments; run it from anywhere)
+
+Needs Python 3 and an installed git: the groups come from `git help -a`, so a different git
+version can move or add commands. Each summary is the first sentence of docs/commands/<cmd>.md.
+Documented commands that git does not list are added to "Internal helpers". Prints the commands
+that have no doc file. Reads no environment variables.
+"""
 import os, subprocess
 
+# Paths are found from this file's location, so the current folder does not matter.
 DOCS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs")
 CMD_DIR = os.path.join(DOCS, "commands")
 
+# git's category headings from `git help -a`, mapped to the plainer headings we show. The order
+# here is the order of the sections in the index.
 NAMES = {
     "Main Porcelain Commands": "Everyday commands",
     "Ancillary Commands / Manipulators": "Change settings and repo data",
@@ -27,6 +38,8 @@ EXTRA = {
 }
 SKIP = {"remote-codecommit"}  # third-party remote helper, not part of git
 
+# Read `git help -a`: a heading line starts at column 0, and the command lines under it are
+# indented, with the command name first.
 groups, cur = {}, None
 for line in subprocess.run(["git", "help", "-a"], capture_output=True, text=True).stdout.splitlines():
     if line and not line.startswith(" "):
@@ -39,12 +52,20 @@ for line in subprocess.run(["git", "help", "-a"], capture_output=True, text=True
 for g, cs in EXTRA.items():
     groups.setdefault(g, []).extend(cs)
 
+# Documented commands that no group lists still get a row. git.md is the global options page,
+# linked from the header instead.
 placed = {c for cs in groups.values() for c in cs}
 other = sorted(f[:-3] for f in os.listdir(CMD_DIR) if f.endswith(".md") and f[:-3] not in placed and f != "git.md")
 if other:
     groups["Low-level Commands / Internal Helpers"] += other
 
 def summary(cmd):
+    """Return the first sentence of docs/commands/<cmd>.md, ending in one full stop.
+
+    The first non-blank line that is not a heading is used. Relative links are rewritten so they
+    work from docs/README.md. Returns None when the doc file does not exist, and "" when it has
+    no text line.
+    """
     p = os.path.join(CMD_DIR, cmd + ".md")
     if not os.path.exists(p):
         return None
@@ -56,6 +77,8 @@ def summary(cmd):
             return s.replace("](../shared/", "](shared/").replace("](", "](commands/").replace("](commands/shared/", "](shared/").replace("](commands/http", "](http")
     return ""
 
+# Write one markdown table per group, commands sorted and without duplicates. Commands that git
+# lists but we have not documented are left out and reported at the end.
 out = ["# gitwhy: every git command, in plain English", "",
        "One file per command, with every flag. Global options (`-C`, `-c`, `--no-pager`, ...): [`git`](commands/git.md).",
        "Shared option sets: [diff options](shared/diff-options.md), [revision options](shared/revision-options.md).", ""]

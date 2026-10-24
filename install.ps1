@@ -41,11 +41,13 @@ $req.AllowAutoRedirect = $false
 $resp = $req.GetResponse()
 $tag = ([string]$resp.Headers['Location']) -replace '.*/tag/', ''
 $resp.Close()
+# goreleaser's archive name has the version without its leading "v".
 if ($tag -notmatch '^v\d') { throw "gitwhy: couldn't find the latest release" }
 $version = $tag.Substring(1)
 $file = "gitwhy_${version}_windows_$arch.zip"
 $base = "https://github.com/$repo/releases/download/$tag"
 
+# Work in a fresh temporary folder; "finally" removes it even when a step fails.
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("gitwhy-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
@@ -57,6 +59,7 @@ try {
   $got = (Get-FileHash -Algorithm SHA256 (Join-Path $tmp $file)).Hash.ToLower()
   if (-not $want -or $want -ne $got) { throw "gitwhy: checksum mismatch for $file; not installing" }
 
+  # Copy only gitwhy.exe; the licenses and README in the zip stay in the temporary folder.
   Expand-Archive -Path (Join-Path $tmp $file) -DestinationPath $tmp -Force
   New-Item -ItemType Directory -Path $binDir -Force | Out-Null
   Copy-Item (Join-Path $tmp 'gitwhy.exe') (Join-Path $binDir 'gitwhy.exe') -Force
@@ -70,6 +73,7 @@ Write-Host "Installed gitwhy $version to $(Join-Path $binDir 'gitwhy.exe')"
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $parts = @(if ($userPath) { $userPath -split ';' | Where-Object { $_ } })
 if ($parts -notcontains $binDir) {
+  # Save it for new terminals, and add it to this session too so gitwhy works right away.
   [Environment]::SetEnvironmentVariable('Path', (($parts + $binDir) -join ';'), 'User')
   $env:Path = (@($env:Path -split ';' | Where-Object { $_ }) + $binDir) -join ';'
   Write-Host "Added $binDir to your PATH. Open a new terminal for other windows to see it."

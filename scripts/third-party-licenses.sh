@@ -10,7 +10,11 @@
 set -eu
 
 out=${1:-THIRD_PARTY_LICENSES}
+# Run from the repository root, so ./cmd/gitwhy and the default output path resolve. A relative
+# output path is therefore relative to the root, not to where you started.
 cd "$(dirname "$0")/.."
+# Build the file in a temporary path and move it into place at the end, so a failure never
+# leaves a half-written THIRD_PARTY_LICENSES.
 tmp=$(mktemp)
 trap 'rm -f "$tmp" "$tmp.mods"' EXIT
 
@@ -39,6 +43,8 @@ done | sort -u > "$tmp.mods"
   # Tab-separated: module path, then its directory (a replace directive gives the local copy,
   # such as third_party/clipboard).
   while IFS='	' read -r path dir; do
+    # Only the module's top folder: license files deeper down belong to test data or examples.
+    # A module without one stops the script, so no dependency is shipped without its license.
     files=$(find "$dir" -maxdepth 1 -type f \( -iname 'LICENSE*' -o -iname 'LICENCE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | sort)
     if [ -z "$files" ]; then
       echo "third-party-licenses: no license file in $path ($dir)" >&2

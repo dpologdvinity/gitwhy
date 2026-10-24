@@ -1,18 +1,38 @@
+# GoReleaser config for gitwhy releases.
+#
+# The release workflow (.github/workflows/release.yml) runs this when a v* tag is pushed. It
+# builds the binaries and Linux packages, writes checksums.txt, creates the GitHub release, and
+# publishes the Homebrew cask, the Scoop manifest and (if a token is set) a winget pull request.
+#
+# Environment variables it reads:
+#   GITHUB_TOKEN        create the GitHub release (set by the workflow)
+#   HOMEBREW_TAP_TOKEN  push the cask and Scoop manifest to dpologdvinity/homebrew-gitwhy
+#   WINGET_TOKEN        optional; push to the winget-pkgs fork and open a pull request
+#
+# Local test build, publishes nothing:
+#   goreleaser release --snapshot --clean --skip=publish
 version: 2
 project_name: gitwhy
+# One static binary per OS and CPU.
 builds:
   - main: ./cmd/gitwhy
     binary: gitwhy
+    # No cgo: the binary is static, so it runs on any Linux (glibc or musl) and cross-compiles.
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
+    # -s -w strip debug info to make the binary smaller; -X sets the text "gitwhy version" prints.
     ldflags: ["-s -w -X main.version={{.Version}}"]
+# The download archives. install.sh, install.ps1 and the npm package fetch these.
 archives:
   - formats: [tar.gz]
     files: [LICENSE, THIRD_PARTY_LICENSES, README.md]
+    # Windows users expect a zip, and install.ps1 unpacks one.
     format_overrides:
       - goos: windows
         formats: [zip]
+# Linux packages: .deb, .rpm, Alpine .apk and Arch. scripts/build-repos.sh turns the .deb and
+# .rpm files into the signed apt and dnf repositories.
 nfpms:
   - id: gitwhy
     package_name: gitwhy
@@ -32,13 +52,16 @@ nfpms:
         dependencies: ["git>=2.40"]
       archlinux:
         dependencies: ["git>=2.40"]
+    # Licenses go where each distribution expects package docs.
     contents:
       - src: LICENSE
         dst: /usr/share/doc/gitwhy/LICENSE
       - src: THIRD_PARTY_LICENSES
         dst: /usr/share/doc/gitwhy/THIRD_PARTY_LICENSES
+# SHA-256 of every file. Every installer checks the download against this file, so keep the name.
 checksum:
   name_template: checksums.txt
+# Homebrew cask, pushed to the dpologdvinity/homebrew-gitwhy tap.
 homebrew_casks:
   - name: gitwhy
     binaries: [gitwhy]
@@ -56,6 +79,7 @@ homebrew_casks:
       owner: dpologdvinity
       name: homebrew-gitwhy
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+# Scoop manifest for Windows, written to the bucket/ folder of the same repository.
 scoops:
   - repository:
       owner: dpologdvinity
@@ -65,6 +89,8 @@ scoops:
     homepage: https://github.com/dpologdvinity/gitwhy
     description: Do anything with git without looking it up, with previews and undo
     license: MIT
+# winget manifest: pushed to a branch of our winget-pkgs fork, then a pull request to
+# microsoft/winget-pkgs. Microsoft reviews it before it goes live.
 winget:
   - name: gitwhy
     package_identifier: dpologdvinity.gitwhy
@@ -74,10 +100,13 @@ winget:
     license: MIT
     homepage: https://github.com/dpologdvinity/gitwhy
     # Without a token (no fork yet) skip the upload instead of failing the release.
+    # "index .Env" gives an empty value for an unset variable; ".Env.WINGET_TOKEN" would be an
+    # error. So the template prints "true" (skip) when WINGET_TOKEN is unset or empty.
     skip_upload: '{{ if index .Env "WINGET_TOKEN" }}false{{ else }}true{{ end }}'
     repository:
       owner: dpologdvinity
       name: winget-pkgs
+      # One branch per version, so an open pull request for an older version is not overwritten.
       branch: "gitwhy-{{ .Version }}"
       token: '{{ index .Env "WINGET_TOKEN" }}'
       pull_request:
@@ -86,5 +115,6 @@ winget:
           owner: microsoft
           name: winget-pkgs
           branch: master
+# Release notes come from GitHub's own generated notes (merged pull requests), not the git log.
 changelog:
   use: github
