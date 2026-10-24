@@ -1,8 +1,18 @@
 # gitwhy
 
 [![ci](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml)
+[![release installs verified](https://github.com/dpologdvinity/gitwhy/actions/workflows/verify-install.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/verify-install.yml)
 [![latest release](https://img.shields.io/github/v/release/dpologdvinity/gitwhy)](https://github.com/dpologdvinity/gitwhy/releases/latest)
+[![npm](https://img.shields.io/npm/v/@kaitlynbassford/gitwhy)](https://www.npmjs.com/package/@kaitlynbassford/gitwhy)
+[![downloads](https://img.shields.io/github/downloads/dpologdvinity/gitwhy/total)](https://github.com/dpologdvinity/gitwhy/releases)
+[![Go version](https://img.shields.io/github/go-mod/go-version/dpologdvinity/gitwhy)](go.mod)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dpologdvinity/gitwhy)](https://goreportcard.com/report/github.com/dpologdvinity/gitwhy)
+[![platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-informational)](#install)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![last commit](https://img.shields.io/github/last-commit/dpologdvinity/gitwhy)](https://github.com/dpologdvinity/gitwhy/commits/main)
+[![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196.svg)](https://www.conventionalcommits.org)
+[![Dependabot](https://img.shields.io/badge/dependabot-enabled-025e8c?logo=dependabot)](.github/dependabot.yml)
+[![stars](https://img.shields.io/github/stars/dpologdvinity/gitwhy?style=flat)](https://github.com/dpologdvinity/gitwhy/stargazers)
 
 **Do anything with git without looking it up. See what will happen first. Undo it after.**
 
@@ -68,7 +78,7 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 ## Install
 
-Needs git 2.40+. Tested on Linux, WSL and Windows (CI); macOS builds but is untested.
+Needs git 2.40+. Tested on Linux, WSL and Windows (CI). macOS installs and runs in CI but has not been used on a real Mac.
 
 ### Linux and macOS
 
@@ -85,6 +95,9 @@ brew install dpologdvinity/gitwhy/gitwhy
 
 ### Debian, Ubuntu (apt)
 
+The package needs git 2.40 or newer (Debian 13 or Ubuntu 24.04 and later); older releases can add the
+repository but `apt` will refuse the install.
+
 ```sh
 sudo install -d -m 0755 /etc/apt/keyrings
 sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.asc -o /etc/apt/keyrings/gitwhy.asc
@@ -93,6 +106,8 @@ sudo apt update && sudo apt install gitwhy
 ```
 
 ### Fedora, RHEL (dnf)
+
+The package needs git 2.40 or newer (Fedora 39 and later).
 
 ```sh
 sudo curl -fsSL https://dpologdvinity.github.io/gitwhy/gitwhy.repo -o /etc/yum.repos.d/gitwhy.repo
