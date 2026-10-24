@@ -1,3 +1,5 @@
+# Shows uncommitted changes: unstaged ("git diff"), staged ("--staged"), or both together
+# ("git diff HEAD", the files against the last commit). Read only: nothing changes.
 title: See what I've changed (not committed yet)
 aliases: [diff, what did i change, uncommitted changes, git diff, staged changes]
 category: inspect history

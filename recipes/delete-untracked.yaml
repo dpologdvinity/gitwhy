@@ -1,3 +1,8 @@
+# Deletes files git doesn't track: all of them ("-fd", or "-fdx" to include ignored files), or only
+# the files the TUI passes in as a preset "files" answer, in which case "Delete what?" is skipped.
+# The second "when" is "{{if .files}}true{{end}}" because a list renders as text like "[]", which
+# would count as true even when the list is empty.
+# gitwhy saves untracked files, and the ignored files about to go, so gitwhy undo can bring them back.
 title: Delete untracked files
 aliases: [clean, git clean, remove untracked files, delete new files]
 category: files
@@ -7,9 +12,13 @@ questions:
   - id: what
     ask: Delete what?
     type: choice
+    when: '{{not .files}}'
     options:
       - {label: "Untracked files and folders (keep ignored ones)", value: "-fd", danger: "Untracked files are deleted from disk."}
       - {label: "Also ignored files (build output, node_modules, .env)", value: "-fdx", danger: "Untracked AND ignored files are deleted, including secrets like .env."}
 steps:
-  - git: [clean, "{{.what}}"]
-predict: Files git doesn't track are deleted from disk. gitwhy saves untracked (and listed ignored) files first so undo can bring them back.
+  - when: '{{not .files}}'
+    git: [clean, "{{.what}}"]
+  - when: '{{if .files}}true{{end}}'
+    git: [clean, -f, --, "{{.files}}"]
+predict: "{{if .files}}These untracked files are deleted from disk: {{join .files \", \"}}.{{else}}Files git doesn't track are deleted from disk.{{end}} gitwhy saves untracked (and listed ignored) files first so undo can bring them back."

@@ -1,3 +1,7 @@
+# Changes the message of a commit. For the last commit it amends it; "--only" with no paths keeps
+# staged changes out. For an older commit it runs "rebase -i" from that commit's parent and gitwhy
+# edits the todo list itself to reword it with your message, so no editor opens. The commit and
+# every later one get new IDs; gitwhy undo puts the old history back.
 title: Change a commit message
 aliases: [rename commit, reword, edit commit message, fix commit message, rename past commit]
 category: rewrite history

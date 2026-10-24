@@ -1,3 +1,7 @@
+# Applies a stash to your files, then removes it (pop) or keeps it (apply). The stash name is built
+# as "stash@{N}"; the braces are written as {{`{`}} and {{`}`}} so the template doesn't read them
+# as its own. On a conflict git keeps the stash. Snapshots save the stash list, so gitwhy undo can
+# go back.
 title: Bring back stashed changes
 aliases: [stash pop, unstash, stash apply, restore stash, get stash back]
 category: stash

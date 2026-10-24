@@ -1,4 +1,7 @@
-// Package recipe defines goal recipes: questions plus git steps.
+// Package recipe defines goal recipes: a recipe is a YAML file with checks, questions and git
+// steps. This package loads and validates the embedded recipes/*.yaml files, renders step
+// arguments from the user's answers with Go templates, and runs the named situation checks.
+// It has no user interface; internal/ui asks the questions and runs the steps.
 package recipe
 
 import (
@@ -16,9 +19,9 @@ import (
 
 // Recipe is one goal, e.g. "Undo last commit".
 type Recipe struct {
-	ID        string     `yaml:"id"`
+	ID        string     `yaml:"id"` // defaults to the file name without ".yaml"
 	Title     string     `yaml:"title"`
-	Aliases   []string   `yaml:"aliases"`
+	Aliases   []string   `yaml:"aliases"` // extra words search matches against
 	Category  string     `yaml:"category"`
 	Explain   string     `yaml:"explain"` // shown before the questions
 	Predict   string     `yaml:"predict"` // template: plain-English effect
@@ -41,23 +44,23 @@ type Question struct {
 	Ask      string   `yaml:"ask"`
 	Type     string   `yaml:"type"` // choice, confirm, text, branch, commit, files, remote, todo
 	Help     string   `yaml:"help"`
-	Options  []Option `yaml:"options"`
+	Options  []Option `yaml:"options"` // choice: the options to pick from (required)
 	Default  string   `yaml:"default"`
-	Optional bool     `yaml:"optional"`
-	When     string   `yaml:"when"`  // template; ask only if it renders truthy
-	Split    bool     `yaml:"split"` // text: split the answer on spaces into a list
+	Optional bool     `yaml:"optional"` // an empty answer is allowed
+	When     string   `yaml:"when"`     // template; ask only if it renders truthy
+	Split    bool     `yaml:"split"`    // text: split the answer on spaces into a list
 	// For branch/commit/files/todo pickers.
-	Source  string   `yaml:"source"` // branch: local, remote, all; files: changed, staged, unstaged, conflicted, untracked; commit/todo: revision range (template)
-	Multi   bool     `yaml:"multi"`
+	Source  string   `yaml:"source"`  // branch: local, remote, all; files: changed (default), staged, unstaged, conflicted, untracked, tracked; commit/todo: revision range (template)
+	Multi   bool     `yaml:"multi"`   // pickers: allow several picks; the answer is a []string
 	Partial bool     `yaml:"partial"` // files: must leave at least one file unpicked
 	Actions []string `yaml:"actions"` // todo: allowed actions besides reorder (drop, squash, fixup, reword)
 }
 
-// Option is one choice.
+// Option is one choice of a "choice" question.
 type Option struct {
-	Label  string `yaml:"label"`
-	Value  string `yaml:"value"`
-	Danger string `yaml:"danger"`
+	Label  string `yaml:"label"`  // text shown to the user
+	Value  string `yaml:"value"`  // the answer stored when picked
+	Danger string `yaml:"danger"` // warning shown next to a risky option
 }
 
 // Step is one git command, or a question asked mid-recipe.
@@ -103,9 +106,11 @@ func (r *Recipe) Question(id string) *Question {
 	return nil
 }
 
+// funcs is the set of extra functions recipe templates may call; "join" joins a list answer.
 var funcs = template.FuncMap{"join": strings.Join}
 
-// Render executes a template string with the answers.
+// Render executes a template string with the answers. A missing answer renders as an empty
+// string, not "<no value>".
 func Render(tmpl string, a Answers) (string, error) {
 	t, err := template.New("").Funcs(funcs).Option("missingkey=zero").Parse(tmpl)
 	if err != nil {
@@ -118,7 +123,8 @@ func Render(tmpl string, a Answers) (string, error) {
 	return strings.ReplaceAll(b.String(), "<no value>", ""), nil
 }
 
-// Truthy renders a "when" template; empty templates are true.
+// Truthy renders a "when" template; empty templates are true. Output that is empty, "false" or
+// "0" after trimming spaces counts as false.
 func Truthy(tmpl string, a Answers) (bool, error) {
 	if strings.TrimSpace(tmpl) == "" {
 		return true, nil
@@ -131,6 +137,8 @@ func Truthy(tmpl string, a Answers) (bool, error) {
 	return out != "" && out != "false" && out != "0", nil
 }
 
+// soloVar matches a step argument that is only "{{.name}}", so a list answer can be splatted into
+// several arguments instead of being rendered as one string.
 var soloVar = regexp.MustCompile(`^\{\{\s*\.(\w+)\s*\}\}$`)
 
 // Args renders a step's git args. A list answer used alone splats. An element that starts with
@@ -157,7 +165,8 @@ func Args(s Step, a Answers) ([]string, error) {
 	return out, nil
 }
 
-// Load reads every recipes/*.yaml file.
+// Load reads and validates every recipes/*.yaml file and returns the recipes sorted by title.
+// A recipe without an ID gets its file name; a duplicate ID is an error.
 func Load(fsys fs.FS) ([]*Recipe, error) {
 	files, err := fs.Glob(fsys, "recipes/*.yaml")
 	if err != nil {
@@ -190,8 +199,13 @@ func Load(fsys fs.FS) ([]*Recipe, error) {
 	return rs, nil
 }
 
+// questionTypes is the set of question types the wizard knows how to ask.
 var questionTypes = map[string]bool{"choice": true, "confirm": true, "text": true, "branch": true, "commit": true, "files": true, "remote": true, "todo": true}
 
+// validate reports the first structural mistake in a recipe: missing title, category or steps,
+// an unknown question type, a choice without options, a step that does nothing or asks an
+// unknown question, an unknown todo action, or an unknown check name. It runs at load time so a
+// broken recipe fails the tests instead of failing for a user.
 func (r *Recipe) validate() error {
 	if r.Title == "" || r.Category == "" || len(r.Steps) == 0 {
 		return fmt.Errorf("recipe %q needs title, category and steps", r.ID)

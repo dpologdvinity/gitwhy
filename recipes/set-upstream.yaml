@@ -1,3 +1,6 @@
+# Sets which remote branch the current branch pulls from and compares against (its upstream).
+# Only the branch's settings in the repository config change. Snapshots don't cover config, so
+# gitwhy undo does not put the old upstream back; run this recipe again instead.
 title: Make my branch track a remote branch
 aliases: [set upstream, track remote branch, no upstream, upstream branch, push -u]
 category: sync with remote

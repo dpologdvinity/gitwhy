@@ -1,3 +1,7 @@
+# Checks out a branch in a new folder (a worktree) that shares this repository's history. If you
+# pick a remote branch with no local branch of that name, gitwhy fills in {{.target_track}} and a
+# new tracking branch {{.target_local}} is made for it. Your current folder doesn't change.
+# Remove the folder later with worktree-remove.
 title: Work on another branch in a separate folder (worktree)
 aliases: [worktree, second checkout, work on two branches at once, worktree add]
 category: monorepo
@@ -5,5 +9,8 @@ questions:
   - {id: target, ask: "Which branch?", type: branch, source: all}
   - {id: dir, ask: "Folder for it (e.g. ../hotfix)", type: text}
 steps:
-  - git: [worktree, add, "{{.dir}}", "{{.target}}"]
-predict: Folder {{.dir}} gets a checkout of {{.target}}, sharing this repo's history. Your current folder doesn't change.
+  - when: '{{not .target_track}}'
+    git: [worktree, add, "{{.dir}}", "{{.target_local}}"]
+  - when: '{{.target_track}}'
+    git: [worktree, add, --track, -b, "{{.target_local}}", "{{.dir}}", "{{.target_track}}"]
+predict: "Folder {{.dir}} gets a checkout of {{if .target_track}}a new local branch {{.target_local}}, made from {{.target_track}} and tracking it{{else}}{{.target_local}}{{end}}, sharing this repo's history. Your current folder doesn't change."

@@ -1,3 +1,7 @@
+# Fetches, then brings a remote branch (origin/master by default) into the current branch: rebase
+# replays your commits on top of it (with --autostash for uncommitted changes), merge adds a merge
+# commit. git may stop with conflicts. gitwhy undo goes back; a rebased branch already pushed
+# needs a force-push.
 title: Update my branch with the latest master
 aliases: [rebase, rebase on master, update branch, catch up with master, rebase onto main, pull master into branch]
 category: sync with remote

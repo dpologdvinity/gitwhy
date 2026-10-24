@@ -1,3 +1,5 @@
+# Turns sparse checkout off, so every folder comes back on disk. History doesn't change.
+# Snapshots save the sparse-checkout settings, so gitwhy undo turns it back on.
 title: Check out every folder again (turn off sparse checkout)
 aliases: [disable sparse checkout, all folders, full checkout, sparse checkout off]
 category: monorepo

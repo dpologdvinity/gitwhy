@@ -1,3 +1,6 @@
+# Stops tracking the picked files but keeps them on disk ("rm --cached"); "-r" allows folders.
+# The removal is staged and happens in your next commit. Add the files to .gitignore too. Old
+# commits still contain them. gitwhy undo stages them again.
 title: Stop tracking a file but keep it (e.g. committed .env)
 aliases: [untrack, stop tracking, remove from git keep file, rm --cached, gitignore not working, ignore committed file]
 category: files

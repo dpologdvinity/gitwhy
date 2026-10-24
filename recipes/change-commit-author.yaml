@@ -1,3 +1,7 @@
+# Changes the author of the last commit to you (from user.name and user.email) or to a name you
+# type. "--only" with no paths commits nothing new, so staged changes stay out of the commit;
+# "--allow-empty" lets this work on a commit that changed no files. gitwhy undo puts the old
+# commit back.
 title: Fix the author of the last commit
 aliases: [change author, wrong email, wrong name, commit author, reset author]
 category: rewrite history

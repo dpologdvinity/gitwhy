@@ -1,3 +1,7 @@
+# Resolves conflicted files: take our version, take their version, fix them in your merge tool, or
+# mark files you already fixed. Every choice ends with "git add", which marks them resolved.
+# The explanation swaps "ours" and "theirs" during a rebase, where git uses them the other way round.
+# gitwhy undo goes back to the conflicted files.
 title: Resolve merge conflicts
 aliases: [conflict, conflicts, merge conflict, fix conflicts, resolve, both modified, unmerged]
 category: merge & conflicts

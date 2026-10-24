@@ -1,3 +1,6 @@
+# Shows the commit and author of each line in a range of a file ("git blame -L 10,20"). "-w"
+# ignores whitespace-only changes and "-C" follows lines moved or copied from other files in the
+# same commit. Read only: nothing changes.
 title: Find who changed a line and why
 aliases: [blame, who wrote this, why does this line exist, git blame, annotate]
 category: inspect history

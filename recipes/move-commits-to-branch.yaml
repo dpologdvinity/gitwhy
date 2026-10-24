@@ -1,3 +1,7 @@
+# Moves your last commits, from the one you pick onward, to an existing branch: it switches there,
+# copies them with cherry-pick, switches back, and moves the current branch back to just before the
+# picked commit. A clean tree is required because the recipe switches branches. If the cherry-pick
+# conflicts, the later steps don't run. gitwhy undo puts both branches back.
 title: Move my last commits to another existing branch
 aliases: [move commits to branch, committed to wrong branch, transfer commits]
 category: branches

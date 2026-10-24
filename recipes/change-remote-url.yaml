@@ -1,3 +1,6 @@
+# Points an existing remote at a new URL, for example after the repository moved or to switch from
+# https to ssh. Only the repository config changes. Snapshots don't cover config, so gitwhy undo
+# does not put the old URL back; run this recipe again with the old URL instead.
 title: Change a remote's URL (moved repo, https to ssh)
 aliases: [change remote url, set-url, repo moved, switch to ssh, change origin]
 category: sync with remote

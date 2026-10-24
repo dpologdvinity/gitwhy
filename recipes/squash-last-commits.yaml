@@ -1,3 +1,7 @@
+# Combines every commit from the one you pick to the latest into one commit with a new message.
+# "reset --soft" to the picked commit's parent keeps all their changes staged, and one commit
+# records them. Anything you had staged before joins that commit too. The first commit can't be
+# picked because it has no parent. gitwhy undo puts the old commits back.
 title: Squash my last commits into one
 aliases: [squash, combine last commits, merge commits into one, squash commits]
 category: rewrite history

@@ -1,3 +1,7 @@
+# Lets you reorder, squash, fixup, reword or drop recent commits in one go. The "todo" question
+# builds a plan; gitwhy then runs "rebase -i" and writes that plan into git's todo list itself.
+# GIT_EDITOR=true accepts git's default messages instead of opening an editor; --no-update-refs
+# leaves other branches that point into these commits alone. gitwhy undo puts the old history back.
 title: Reorder, squash, rename or drop recent commits
 aliases: [reorder commits, squash commits, combine commits, interactive rebase, rebase -i, fixup, clean up commits, move commit up, move commit down]
 category: rewrite history

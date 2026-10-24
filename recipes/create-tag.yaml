@@ -1,3 +1,7 @@
+# Creates an annotated tag (with a one-line note) on a commit, and pushes it if you say yes.
+# The push names "refs/tags/<name>" in full, so it can't be mistaken for a branch of the same name.
+# {{.remote}} is filled in by gitwhy: the current branch's remote, or origin. gitwhy undo removes
+# the local tag; a pushed tag stays on the remote.
 title: Tag a release (create a tag)
 aliases: [tag, create tag, release tag, version tag, mark release]
 category: branches

@@ -1,3 +1,7 @@
+# Deletes a local branch, its remote branch, or both. "-d" refuses to delete unmerged work; "-D"
+# (force) deletes anyway. The remote branch name comes from the branch's tracking settings
+# ({{.target_remote}} and {{.target_merge}}, filled in by gitwhy), so the recipe stops early when
+# the branch tracks nothing. gitwhy undo brings a local branch back; a remote delete can't be undone.
 title: Delete a branch
 aliases: [delete branch, remove branch, branch -d, delete remote branch, clean up branches]
 category: branches

@@ -20,11 +20,14 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/tui"
 )
 
-// TUI shows the full-screen home and runs what the user picks, then comes back.
+// TUI shows the full-screen home and runs what the user picks, then comes back. Outside a
+// repository it shows the simple menu instead, because the TUI needs a repository to show.
 func (a *App) TUI() error {
 	if err := a.needRepo(); err != nil {
 		return a.Home()
 	}
+	// The TUI closes before an action runs, so the action's prompts and git's output use the
+	// normal terminal. After each action wait for Enter, so its output can be read, then reopen.
 	for {
 		act, err := tui.Run(a.Repo)
 		if err != nil {
@@ -58,7 +61,7 @@ func (a *App) TUI() error {
 	}
 }
 
-// Home is the main menu.
+// Home is the simple main menu, used when the full-screen TUI cannot run.
 func (a *App) Home() error {
 	var v string
 	err := prompt(huh.NewSelect[string]().Title("gitwhy: what do you want to do?").Options(
@@ -90,7 +93,8 @@ func (a *App) Home() error {
 	return nil
 }
 
-// Search shows results for a query and runs the chosen one.
+// Search shows the top 15 results for a query and runs the chosen one: a recipe runs its
+// wizard, and a command or flag opens the builder with that command (and flag) picked.
 func (a *App) Search(q string) error {
 	results := a.Index.Search(q, 15)
 	if len(results) == 0 {
@@ -129,7 +133,7 @@ func (a *App) Search(q string) error {
 	}
 }
 
-// Browse picks a recipe by category.
+// Browse picks a recipe by category, or opens the builder for any other command.
 func (a *App) Browse() error {
 	cats := map[string][]*recipe.Recipe{}
 	for _, r := range a.Recipes {
@@ -179,6 +183,8 @@ func longest(f kb.Flag) string {
 }
 
 // Build lets the user assemble any git command from the docs: command, subcommand, flags, args.
+// cmd skips the command question when set, and preselect ticks that flag. The result goes
+// through Run, so it gets the same preview, confirm and snapshot as a typed command.
 func (a *App) Build(cmd, preselect string) error {
 	if cmd == "" {
 		var opts []huh.Option[string]
@@ -238,6 +244,8 @@ func (a *App) Build(cmd, preselect string) error {
 			if err := prompt(in); err != nil {
 				return cancelled(err)
 			}
+			// A long option takes its value after "=", which is also the only way to give an
+			// optional value; a short option takes it as the next argument.
 			switch {
 			case v == "" && f.Optional:
 				args = append(args, name)
@@ -263,7 +271,9 @@ func (a *App) Build(cmd, preselect string) error {
 	return a.Run(append(args, more...))
 }
 
-// Run previews, explains, snapshots and runs a literal git command.
+// Run previews, explains, snapshots and runs a literal git command. A leading "git" is
+// dropped. Read-only commands, and clone and init outside a repository, are explained and
+// run straight away, because there is nothing to undo.
 func (a *App) Run(args []string) error {
 	if len(args) > 0 && args[0] == "git" {
 		args = args[1:]
@@ -284,11 +294,9 @@ func (a *App) Run(args []string) error {
 		r := a.Repo
 		if r == nil {
 			wd, _ := os.Getwd()
-			return gitIn(wd, args)
+			return passthrough(gitIn(wd, args))
 		}
-		r2 := *r
-		r2.Dir = a.Cwd
-		return r2.Interactive(args...)
+		return passthrough(typed(git.Runner{Dir: a.Cwd, Env: r.Env}).Interactive(args...))
 	}
 	return a.execute(job{title: "git " + shellJoin(args), literal: args})
 }
@@ -302,7 +310,8 @@ var readOnly = map[string]bool{
 	"check-ignore": true, "check-attr": true, "var": true, "cherry": true, "show-branch": true, "difftool": true,
 }
 
-// Explain prints the breakdown of a command without running it.
+// Explain prints the breakdown of a command and its warnings without running it. It shows
+// the breakdown even when GITWHY_EXPLAIN=0, because that is what was asked for.
 func (a *App) Explain(args []string) error {
 	if len(args) > 0 && args[0] == "git" {
 		args = args[1:]
@@ -314,13 +323,14 @@ func (a *App) Explain(args []string) error {
 	a.Quiet = false
 	a.showCommand(args)
 	a.Quiet = quiet
-	for _, w := range dangerOf(args) {
+	for _, w := range dangerOf(a.Repo, args) {
 		warn(w)
 	}
 	return nil
 }
 
-// Undo restores the latest snapshot, or one the user picks.
+// Undo restores the latest snapshot, or one the user picks when pick is true. Restore saves
+// the current state as a new snapshot first, so running undo again redoes the change.
 func (a *App) Undo(pick bool) error {
 	if err := a.needRepo(); err != nil {
 		return err
@@ -361,12 +371,15 @@ func (a *App) Undo(pick bool) error {
 	for _, note := range res.Skipped {
 		warn(note)
 	}
+	// The restored snapshot is used up. The one Restore took of the state before this undo is
+	// now the newest, so the next undo redoes the change.
 	snapshot.Delete(a.Repo, s)
 	say("%s Changed your mind? %s again redoes it.", okStyle.Render("✓ Undone."), cmdStyle.Render("gitwhy undo"))
 	return nil
 }
 
-// Recover shows recent events (from plain git too) and lost work, and undoes one.
+// Recover shows recent events (from plain git too) and lost work, and undoes one. Undoing an
+// event runs its reflog command through execute, so it is previewed and snapshotted too.
 func (a *App) Recover() error {
 	if err := a.needRepo(); err != nil {
 		return err
@@ -397,6 +410,9 @@ func (a *App) Recover() error {
 		predict: "Goes back to before: " + e.Text + ". Uncommitted changes are kept; git stops if one would be overwritten."})
 }
 
+// lost lists unreachable commits and staged files git still has. A commit is saved by making
+// a branch at it (through execute); a file is written under the repository root, never over
+// an existing file.
 func (a *App) lost() error {
 	say("%s", dimStyle.Render("Searching (can take a while in big repos)..."))
 	ls, err := recover.LostObjects(a.Repo, 40)
@@ -447,6 +463,7 @@ func (a *App) lost() error {
 	return nil
 }
 
+// contains reports whether xs has x.
 func contains(xs []string, x string) bool {
 	for _, y := range xs {
 		if y == x {
@@ -456,6 +473,14 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
-func dangerOf(args []string) []string { return danger.Warnings(args) }
+// dangerOf returns the warnings for a command line. The repository (nil outside one) lets
+// "git checkout <file>" be told apart from "git checkout <branch>".
+func dangerOf(repo *git.Repo, args []string) []string { return danger.WarningsIn(repo, args) }
 
-func gitIn(dir string, args []string) error { return git.Runner{Dir: dir}.Interactive(args...) }
+// gitIn runs a typed git command in dir, attached to the terminal. Run uses it outside a
+// repository, for clone and init.
+func gitIn(dir string, args []string) error { return typed(git.Runner{Dir: dir}).Interactive(args...) }
+
+// typed returns r for a git command the user typed: file patterns keep git's normal globbing,
+// even though gitwhy's own git calls treat paths literally (GIT_LITERAL_PATHSPECS=1).
+func typed(r git.Runner) git.Runner { return r.With("GIT_LITERAL_PATHSPECS=0") }

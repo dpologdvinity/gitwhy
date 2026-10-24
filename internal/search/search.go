@@ -1,4 +1,6 @@
-// Package search ranks recipes, commands and flags against a few words.
+// Package search ranks recipes, commands and flags against a few words. It is a small in-memory
+// word index with prefix, substring and one-typo matching; recipes weigh more than commands, and
+// commands more than flags, so a goal is found before the raw git command that does it.
 package search
 
 import (
@@ -10,37 +12,41 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
 )
 
-// Kind of result.
+// Kind is the kind of thing a search result points at.
 type Kind int
 
+// The kinds of search result.
 const (
-	Recipe Kind = iota
-	Command
-	Flag
+	Recipe  Kind = iota // a recipe; Result.Recipe is set
+	Command             // a git command; Result.Cmd is set
+	Flag                // one flag of a git command; Result.Cmd and Result.Flag are set
 )
 
 // Result is one search hit.
 type Result struct {
 	Kind   Kind
-	Recipe *recipe.Recipe
-	Cmd    string // command name for Command and Flag
-	Flag   kb.Flag
-	Title  string
-	Detail string
-	score  float64
+	Recipe *recipe.Recipe // only for Recipe
+	Cmd    string         // command name for Command and Flag
+	Flag   kb.Flag        // only for Flag
+	Title  string         // one line shown in the result list
+	Detail string         // recipe category, command summary or flag meaning
+	score  float64        // ranking score; higher is better
 }
 
+// doc is one indexed document: a result plus the words it is matched on.
 type doc struct {
 	r      Result
 	title  []string // words weighted higher
-	body   []string
-	weight float64
+	body   []string // other words, weighted lower
+	weight float64  // multiplies the score; ranks recipes over commands over flags
 }
 
 // Index is a searchable set of documents.
 type Index struct{ docs []doc }
 
-// New builds an index over recipes, commands and their flags.
+// New builds an index over recipes, commands and their flags. Recipe titles and aliases, command
+// names and flag spellings are title words; categories, explanations and descriptions are body
+// words.
 func New(k *kb.KB, rs []*recipe.Recipe) *Index {
 	ix := &Index{}
 	for _, r := range rs {
@@ -71,7 +77,9 @@ func New(k *kb.KB, rs []*recipe.Recipe) *Index {
 	return ix
 }
 
-// Search returns up to n results, best first.
+// Search returns up to n results, best first. Each query word scores its best match in the
+// document (title matches count 1.5 times), and the total is scaled by the square of the share of
+// query words that matched.
 func (ix *Index) Search(query string, n int) []Result {
 	q := words(query)
 	if len(q) == 0 {
@@ -114,7 +122,9 @@ func (ix *Index) Search(query string, n int) []Result {
 	return out
 }
 
-// best scores one query word against a document's words.
+// best scores one query word against a document's words and returns the best score: 3 for an
+// exact word, 2 for a prefix, 1 for a substring or a one-typo match, 0 for none. Short words get
+// only exact or prefix matches, so "re" does not match half the index.
 func best(q string, ws []string) float64 {
 	b := 0.0
 	for _, w := range ws {
@@ -136,8 +146,12 @@ func best(q string, ws []string) float64 {
 	return b
 }
 
+// stop lists filler words that are dropped from queries and documents. "git" is one of them
+// because every command title starts with it.
 var stop = map[string]bool{"a": true, "an": true, "the": true, "to": true, "my": true, "i": true, "how": true, "do": true, "of": true, "in": true, "on": true, "it": true, "git": true, "want": true, "and": true, "is": true, "for": true}
 
+// words splits text into lower-case words of letters, digits and dashes, drops stop words, and
+// adds the parts of a dashed word as extra words.
 func words(s string) []string {
 	f := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-'
@@ -156,7 +170,9 @@ func words(s string) []string {
 	return out
 }
 
-// closeEnough reports an edit distance of at most 1 (one typo) between a and b.
+// closeEnough reports an edit distance of at most 1 (one typo) between a and b: one letter added,
+// removed or changed, or two neighboring letters swapped. It compares bytes, so it is meant for
+// ASCII words.
 func closeEnough(a, b string) bool {
 	if a == b {
 		return true
@@ -182,7 +198,7 @@ func closeEnough(a, b string) bool {
 		case lb > la:
 			j++
 		default:
-			// Swapped neighbors ("comit" vs "commti") count as one edit.
+			// Swapped neighbors ("commti" vs "commit") count as one edit.
 			if i+1 < la && j+1 < lb && a[i] == b[j+1] && a[i+1] == b[j] {
 				i += 2
 				j += 2

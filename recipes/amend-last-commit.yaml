@@ -1,3 +1,7 @@
+# Adds the picked changed files to the last commit and keeps its message; the commit gets a new ID.
+# "add -A" stages deletions too. {{.files_from}} is filled in by gitwhy with the old path of any
+# picked file that is a staged rename, so the commit records the whole rename, not just an add.
+# gitwhy undo puts the old commit back. If it was already pushed you will need to force-push.
 title: Add changes to the last commit
 aliases: [amend, add to last commit, forgot a file, amend commit]
 category: commits
@@ -8,5 +12,5 @@ questions:
   - {id: files, ask: "Which changed files to add?", type: files, source: changed, multi: true}
 steps:
   - git: [add, -A, --, "{{.files}}"]
-  - git: [commit, --amend, --no-edit, --, "{{.files}}"]
+  - git: [commit, --amend, --no-edit, --, "{{.files}}", "{{.files_from}}"]
 predict: The chosen changes join the last commit, keeping its message. It gets a new ID.

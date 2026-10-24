@@ -1,3 +1,5 @@
+# Lists the files in the current commit that are stored in Git LFS. Needs the git-lfs extension.
+# Read only: nothing changes, so there is nothing to undo.
 title: List files stored in Git LFS
 aliases: [lfs ls-files, which files are in lfs, lfs status]
 category: LFS

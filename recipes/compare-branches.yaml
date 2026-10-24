@@ -1,3 +1,7 @@
+# Shows how two branches differ. Read only: nothing changes, so there is nothing to undo.
+# The log uses "a...b" with --left-right and --cherry-mark to mark commits found on only one side
+# or on both. The diff uses "b...a" on purpose: it shows what the first branch changed since the
+# two split, not the second branch's changes.
 title: Compare two branches
 aliases: [compare branches, diff branches, what's different, branch difference, ahead behind]
 category: inspect history

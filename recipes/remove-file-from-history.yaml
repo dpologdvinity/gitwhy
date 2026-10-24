@@ -1,3 +1,8 @@
+# Removes a file or folder from every commit with git-filter-repo (a separate tool). --force lets it
+# run in a repository that isn't a fresh clone. --refs limits it to your local branches and tags
+# ({{.local_refs}}, filled in by gitwhy) and makes filter-repo skip its cleanup, so gitwhy's
+# snapshot refs keep the old commits and gitwhy undo can go back. Commit IDs change and you must
+# force-push.
 title: Remove a file from all history (leaked secret, huge file)
 aliases: [remove file from history, delete secret, purge file, filter-repo, filter-branch, bfg, remove password from git]
 category: rewrite history

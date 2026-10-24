@@ -1,3 +1,7 @@
+# Splits one commit into two. For an older commit, "rebase -i" first stops at it ("edit", set by
+# gitwhy in the todo list). "reset HEAD~1" then undoes the commit but keeps its changes, and the
+# file question is asked only now (ask: first), when those changes exist. The picked files become
+# the first commit and the rest of the commit's files ({{.commit_files}}) the second. gitwhy undo goes back.
 title: Split a commit into two
 aliases: [split commit, break up commit, divide commit]
 category: rewrite history

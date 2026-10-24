@@ -1,3 +1,6 @@
+# Deletes a tag locally, and on the remote too if you choose. The push names "refs/tags/<name>" in
+# full so a branch with the same name is never deleted. {{.remote}} is filled in by gitwhy.
+# gitwhy undo brings the local tag back; a remote delete can't be undone.
 title: Delete a tag
 aliases: [delete tag, remove tag, wrong tag, untag]
 category: branches

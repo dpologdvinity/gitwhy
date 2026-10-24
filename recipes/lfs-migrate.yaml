@@ -1,3 +1,7 @@
+# Rewrites history so files matching a pattern are stored in Git LFS, on the current branch or on
+# every branch and tag (--everything). The scope argument starts with "{{if", so it is left out
+# instead of passed as "" when empty. Commit IDs change and you must force-push. gitwhy undo puts the
+# old local branches back; anything already pushed stays rewritten on the remote.
 title: Move existing big files into Git LFS (rewrites history)
 aliases: [lfs migrate, convert to lfs, move files to lfs, lfs import]
 category: LFS

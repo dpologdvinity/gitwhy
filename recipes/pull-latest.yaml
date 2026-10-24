@@ -1,3 +1,7 @@
+# Pulls new commits from the branch's upstream. You choose what happens if both sides have new
+# commits: stop (--ff-only), rebase, or merge (--no-rebase). For rebase and merge, --autostash sets
+# uncommitted changes aside and puts them back afterwards; the --ff-only case has its own step
+# without it. gitwhy undo puts the branch and files back.
 title: Get the latest changes for my branch
 aliases: [pull, download changes, update, sync, git pull]
 category: sync with remote
