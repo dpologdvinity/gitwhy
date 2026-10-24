@@ -8,6 +8,9 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
 )
 
+// TestSearchFindsRecipes proves that everyday phrasings, including a typo ("undo comit") and git
+// jargon ("cherry pick"), find the intended recipe in the top 3, and that a dashed query still
+// returns a result.
 func TestSearchFindsRecipes(t *testing.T) {
 	fsys := os.DirFS("../..")
 	k, err := kb.Load(fsys)
@@ -79,6 +82,8 @@ func TestSafeRecipeFirst(t *testing.T) {
 	t.Error("no recipe for \"reset file\"")
 }
 
+// TestCloseEnough proves that one missing letter, one swap of neighbors or one changed letter is a
+// typo match, and that different words of similar length are not.
 func TestCloseEnough(t *testing.T) {
 	for _, c := range []struct {
 		a, b string

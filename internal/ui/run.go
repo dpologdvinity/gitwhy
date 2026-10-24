@@ -14,12 +14,12 @@ import (
 
 // job is what will run: recipe steps with answers, or one literal command.
 type job struct {
-	title   string
+	title   string         // names the job; the snapshot label when there are several steps
 	r       *recipe.Recipe // nil for a literal command
 	steps   []recipe.Step
-	ans     recipe.Answers
-	literal []string // args of a literal command (not templated)
-	predict string
+	ans     recipe.Answers // answers so far; mid-recipe questions add to it while running
+	literal []string       // args of a literal command (not templated)
+	predict string         // recipe text shown when no exact preview exists
 }
 
 // planned is a step ready to show: its args with later answers as placeholders.
@@ -31,8 +31,11 @@ type planned struct {
 // stopError is a recipe "fail" step: shown plainly, nothing ran.
 type stopError struct{ msg string }
 
+// Error returns the rendered "fail" message.
 func (e stopError) Error() string { return e.msg }
 
+// plan turns a job into the commands to show and the recipe warnings to add. A literal
+// command is one step as typed; recipe steps go through planSteps.
 func (a *App) plan(j job) ([]planned, []string, error) {
 	if j.literal != nil {
 		return []planned{{args: j.literal}}, nil, nil
@@ -43,6 +46,7 @@ func (a *App) plan(j job) ([]planned, []string, error) {
 // planSteps resolves recipe steps with the answers so far: questions asked later show as
 // <name>, "when" is honored, a true "fail" stops with stopError and "warn" adds a warning.
 func planSteps(steps []recipe.Step, ans recipe.Answers) ([]planned, []string, error) {
+	// Work on a copy so the placeholders never leak into the real answers.
 	shown := recipe.Answers{}
 	for k, v := range ans {
 		shown[k] = v
@@ -98,7 +102,23 @@ func (a *App) runner(j job) *git.Repo {
 	return &r
 }
 
-// execute previews, explains, confirms, snapshots and runs a job.
+// execute previews, explains, confirms, snapshots and runs a job. Every recipe and every
+// "gitwhy run" ends here. In order:
+//
+//  1. plan resolves the steps; a true "fail" step stops here and nothing runs.
+//  2. "What will happen": for one step, the preview's lines. When the preview is not exact,
+//     the recipe's predict text follows, or else (one step, no predict) the command's summary
+//     from the docs.
+//  3. Warnings from the recipe's "warn" steps and from the danger rules, without repeats.
+//  4. Each command, explained part by part.
+//  5. "Run it?" defaults to No when any warning was shown, and to Yes otherwise.
+//  6. snapshot.Take saves an undo point, with the ignored files the preview says git will
+//     delete. If it fails, nothing runs.
+//  7. The steps run in order; mid-recipe questions are asked when their step is reached.
+//  8. snapshot.Finish runs in a defer, so the "after" refs are recorded even when a step
+//     fails. Undo uses them to leave alone refs that moved later.
+//
+// When a step fails or a mid-recipe question is cancelled, failed explains what to do next.
 func (a *App) execute(j job) error {
 	if err := a.needRepo(); err != nil {
 		return err
@@ -120,8 +140,9 @@ func (a *App) execute(j job) error {
 
 	// What will happen.
 	heading("What will happen")
-	var save []string
+	var save []string // ignored files git is about to delete; the snapshot keeps them
 	exact := false
+	// Exact previews only exist for one step: later steps depend on what earlier ones do.
 	if len(steps) == 1 {
 		p := preview.Preview(where, steps[0].args)
 		if p.Exact {
@@ -177,6 +198,7 @@ func (a *App) execute(j job) error {
 	}
 	say("")
 
+	// Default to No when there is a warning, so pressing Enter never runs something risky.
 	ok, err := Confirm("Run it?", len(warnings) == 0)
 	if err != nil || !ok {
 		if err == nil {
@@ -189,6 +211,7 @@ func (a *App) execute(j job) error {
 	if len(steps) > 1 {
 		label = j.title
 	}
+	// The snapshot is taken of the whole repository (a.Repo), not the folder the command runs in.
 	snap, err := snapshot.Take(a.Repo, label, save)
 	if err != nil {
 		return fmt.Errorf("couldn't save an undo point, so nothing ran: %w", err)
@@ -227,6 +250,7 @@ func (a *App) execute(j job) error {
 		if err != nil {
 			return err
 		}
+		// "fail" and "warn" were handled by plan before the prompt; they run nothing.
 		if s.Fail != "" || s.Warn != "" {
 			continue
 		}
@@ -249,6 +273,8 @@ func notRun(steps []recipe.Step, ans recipe.Answers) [][]string {
 	return out
 }
 
+// runOne prints and runs one git command in where, attached to the terminal so git can ask
+// for input or open an editor. The step's env is added, plus GIT_SEQUENCE_EDITOR for a todo step.
 func (a *App) runOne(where *git.Repo, s recipe.Step, args []string, ans recipe.Answers) error {
 	env := append([]string{}, s.Env...)
 	if len(s.Todo) > 0 {
@@ -262,6 +288,9 @@ func (a *App) runOne(where *git.Repo, s recipe.Step, args []string, ans recipe.A
 	return where.With(env...).Interactive(args...)
 }
 
+// todoEnv returns the environment entry that makes git call "gitwhy __todo" as its rebase
+// sequence editor. A "plan" entry points at a plan file the recipe already has; otherwise the
+// step's todo edits are rendered and written to a new plan file.
 func (a *App) todoEnv(s recipe.Step, ans recipe.Answers) (string, error) {
 	var p todo.Plan
 	for _, e := range s.Todo {
@@ -289,6 +318,7 @@ func (a *App) todoEnv(s recipe.Step, ans recipe.Answers) (string, error) {
 	return todo.Editor(a.Self, path), nil
 }
 
+// done reports success and how to undo it.
 func (a *App) done() {
 	say("")
 	say("%s Undo with: %s", okStyle.Render("✓ Done."), cmdStyle.Render("gitwhy undo"))
@@ -296,7 +326,17 @@ func (a *App) done() {
 
 // failed explains a step that stopped and what to do next. left lists the commands of the
 // steps that did not run: when some are left, "gitwhy continue" would finish only git's part,
-// so the advice is to go back with "gitwhy undo" instead.
+// so the advice is to go back with "gitwhy undo" instead. The advice, first match wins:
+//
+//   - a bisect is running: end it with "gitwhy abort" (bisect has no --continue);
+//   - steps are left: list them and advise "gitwhy undo" (and "gitwhy resolve" for conflicts);
+//   - conflicts inside a merge, rebase, cherry-pick or revert: resolve, then continue, or
+//     abort or undo;
+//   - conflicts with no operation (such as "stash pop"): resolve, then commit, or undo;
+//   - an operation in progress without conflicts: continue, abort or undo;
+//   - otherwise: undo puts everything back.
+//
+// It always returns ErrCancelled, because the error has already been shown.
 func (a *App) failed(err error, left [][]string) error {
 	say("")
 	say("%s", badStyle.Render("✗ It stopped: "+firstLine(err.Error())))
@@ -329,6 +369,8 @@ func (a *App) failed(err error, left [][]string) error {
 	return ErrCancelled
 }
 
+// firstLine picks the line of git's output worth showing: the first "error:" or "fatal:"
+// line, or else the first line.
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	for _, l := range strings.Split(s, "\n") {

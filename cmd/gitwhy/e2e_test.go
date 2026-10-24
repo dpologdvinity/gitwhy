@@ -17,8 +17,11 @@ import (
 	"time"
 )
 
+// bin is the path of the gitwhy binary that TestMain builds for every end-to-end test.
 var bin string
 
+// TestMain builds the real binary once into a temporary folder, runs the tests against it and
+// removes it, so the tests exercise exactly what users run.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "gitwhy-e2e-")
 	if err != nil {
@@ -38,11 +41,15 @@ func TestMain(m *testing.M) {
 
 // answer is a typed line, or a menu pick chosen by the option's text.
 type answer struct {
-	text string
-	pick string
+	text string // sent as is
+	pick string // text of the option to choose; drive sends its number
 }
 
+// text answers a prompt with the line s.
 func text(s string) answer { return answer{text: s} }
+
+// pick answers a menu with the last listed option whose text contains s. A leading "$" means
+// the option text must end with the rest of s.
 func pick(s string) answer { return answer{pick: s} }
 
 // todoItem picks a line of the rebase editor by its subject (the line ends with it).
@@ -51,25 +58,31 @@ func todoItem(s string) answer { return answer{pick: "$ " + s} }
 // commit picks a commit by its subject (option text is "<hash> <subject>  <when>").
 func commit(s string) answer { return answer{pick: " " + s + "  "} }
 
+// yes answers a yes/no prompt with "y".
 var yes = text("y")
 
+// syncBuf is a buffer that the running process writes to while drive reads it.
 type syncBuf struct {
 	mu sync.Mutex
 	b  bytes.Buffer
 }
 
+// Write appends p under the lock.
 func (s *syncBuf) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.Write(p)
 }
 
+// String returns everything written so far.
 func (s *syncBuf) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
 }
 
+// ansi matches color codes, which are stripped from the output. optLine matches a numbered
+// option of a plain-text menu ("3. text", with a "✓ " mark on the selected one).
 var (
 	ansi    = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	optLine = regexp.MustCompile(`(?m)^\s*(\d+)\.\s+(?:✓ )?(.*)$`)
@@ -83,7 +96,10 @@ func env(home string) []string {
 		"GIT_EDITOR=true", "LC_ALL=C", "XDG_CONFIG_HOME="+home)
 }
 
-// drive runs gitwhy in dir with args, answering prompts in order.
+// drive runs gitwhy in dir with args, answering prompts in order. A text answer is sent at
+// once; it waits in stdin until the prompt reads it. A pick waits (up to 20 seconds) until the
+// option is listed after the previous pick and the menu has asked for a number, then sends that
+// number. It returns all output without color codes and fails after 60 seconds.
 func drive(t *testing.T, dir string, args []string, answers ...answer) string {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
@@ -144,11 +160,13 @@ func find(out, s string) string {
 	return n
 }
 
+// repo is a throwaway git repository for one test.
 type repo struct {
 	t   *testing.T
 	dir string
 }
 
+// newRepo makes a repository on main with four commits, c1 to c4, each adding f<n>.txt.
 func newRepo(t *testing.T) *repo {
 	r := &repo{t: t, dir: t.TempDir()}
 	r.git("init", "-q", "-b", "main")
@@ -162,6 +180,7 @@ func newRepo(t *testing.T) *repo {
 	return r
 }
 
+// git runs git in the repository and returns its trimmed output; it fails the test on error.
 func (r *repo) git(args ...string) string {
 	r.t.Helper()
 	c := exec.Command("git", args...)
@@ -174,6 +193,7 @@ func (r *repo) git(args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// write creates or overwrites a file in the repository, making folders as needed.
 func (r *repo) write(path, content string) {
 	p := filepath.Join(r.dir, path)
 	os.MkdirAll(filepath.Dir(p), 0o755)
@@ -182,6 +202,7 @@ func (r *repo) write(path, content string) {
 	}
 }
 
+// read returns a file's content, or "<missing>" when it does not exist.
 func (r *repo) read(path string) string {
 	b, err := os.ReadFile(filepath.Join(r.dir, path))
 	if err != nil {
@@ -190,6 +211,7 @@ func (r *repo) read(path string) string {
 	return string(b)
 }
 
+// commit writes files, given as path and content pairs, and commits all changes with msg.
 func (r *repo) commit(msg string, files ...string) {
 	for i := 0; i+1 < len(files); i += 2 {
 		r.write(files[i], files[i+1])
@@ -198,13 +220,16 @@ func (r *repo) commit(msg string, files ...string) {
 	r.git("commit", "-q", "-m", msg)
 }
 
+// subjects returns the commit subjects of HEAD's history, newest first, one per line.
 func (r *repo) subjects() string { return r.git("log", "--format=%s") }
 
+// do runs "gitwhy do <recipe>" in the repository with the given answers.
 func (r *repo) do(recipe string, answers ...answer) string {
 	r.t.Helper()
 	return drive(r.t, r.dir, []string{"do", recipe}, answers...)
 }
 
+// expect fails the test when got is not want, showing gitwhy's output to explain why.
 func expect(t *testing.T, what, got, want, out string) {
 	t.Helper()
 	if got != want {
@@ -212,6 +237,9 @@ func expect(t *testing.T, what, got, want, out string) {
 	}
 }
 
+// TestUndoLastCommit proves each choice of "undo last commit" (keep changes staged, keep them
+// unstaged, delete them) removes the commit with the right status, and that "gitwhy undo"
+// brings the commit and a clean tree back. This is the most common recipe.
 func TestUndoLastCommit(t *testing.T) {
 	for _, c := range []struct{ choice, status string }{
 		{"Yes, staged", "A  f4.txt"}, {"Yes, unstaged", "?? f4.txt"}, {"No, delete", ""},
@@ -229,6 +257,8 @@ func TestUndoLastCommit(t *testing.T) {
 	}
 }
 
+// TestRewordCommit proves "reword commit" changes the message of the last commit and of an
+// older one (through a rebase todo list) without changing any file.
 func TestRewordCommit(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("reword-commit", commit("c4"), text("head renamed"), yes)
@@ -238,6 +268,7 @@ func TestRewordCommit(t *testing.T) {
 	expect(t, "files kept", r.read("f2.txt")+r.read("f4.txt"), "2\n4\n", out)
 }
 
+// TestDropCommit proves "drop commit" removes a commit in the middle of history and its changes.
 func TestDropCommit(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("drop-commit", commit("c3"), yes)
@@ -245,6 +276,8 @@ func TestDropCommit(t *testing.T) {
 	expect(t, "f3 gone", r.read("f3.txt"), "<missing>", out)
 }
 
+// TestReorderAndSquash proves the rebase todo editor: moving a commit up reorders history, and
+// a fixup folds a commit into the one above it, keeping both commits' files.
 func TestReorderAndSquash(t *testing.T) {
 	r := newRepo(t)
 	// Last 3 commits, oldest first: c2, c3, c4. Move c4 up, done.
@@ -256,6 +289,8 @@ func TestReorderAndSquash(t *testing.T) {
 	expect(t, "files", r.git("show", "--name-only", "--format=", "HEAD"), "f3.txt\nf4.txt", out)
 }
 
+// TestSquashLast proves "squash last commits" turns the picked commit and every commit after it
+// into one commit with the new message and leaves a clean tree.
 func TestSquashLast(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("squash-last-commits", commit("c2"), text("all in one"), yes)
@@ -263,6 +298,8 @@ func TestSquashLast(t *testing.T) {
 	expect(t, "status", r.git("status", "--porcelain"), "", out)
 }
 
+// TestSplitCommit proves "split commit" splits the last commit, and an older one with commits
+// on top, into two commits by the files picked, keeping the later commits and a clean tree.
 func TestSplitCommit(t *testing.T) {
 	r := newRepo(t)
 	r.commit("both", "x.txt", "x\n", "y.txt", "y\n")
@@ -280,6 +317,8 @@ func TestSplitCommit(t *testing.T) {
 	expect(t, "clean", r.git("status", "--porcelain"), "", out)
 }
 
+// TestFixPastCommit proves "fix past commit" puts a working-tree change into an older commit
+// while keeping every commit message and leaving a clean tree.
 func TestFixPastCommit(t *testing.T) {
 	r := newRepo(t)
 	r.write("f2.txt", "2 fixed\n")
@@ -289,6 +328,8 @@ func TestFixPastCommit(t *testing.T) {
 	expect(t, "clean", r.git("status", "--porcelain"), "", out)
 }
 
+// TestMoveCommitsToNewBranch proves the picked commit and the ones after it move to a new
+// branch, which is checked out, and main goes back to before them.
 func TestMoveCommitsToNewBranch(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("move-commits-new-branch", commit("c3"), text("feat"), yes, yes)
@@ -297,6 +338,8 @@ func TestMoveCommitsToNewBranch(t *testing.T) {
 	expect(t, "main", r.git("log", "--format=%s", "main"), "c2\nc1", out)
 }
 
+// TestMoveCommitsToExistingBranch proves a commit moves onto another existing branch, leaves
+// main, and the user ends up back on main.
 func TestMoveCommitsToExistingBranch(t *testing.T) {
 	r := newRepo(t)
 	r.git("branch", "other", "HEAD~2")
@@ -306,7 +349,8 @@ func TestMoveCommitsToExistingBranch(t *testing.T) {
 	expect(t, "back on main", r.git("branch", "--show-current"), "main", out)
 }
 
-// withRemote makes a bare origin and a clone.
+// withRemote makes a bare origin and a clone. It returns the upstream repository (which has the
+// bare one as origin, so it can push new commits) and the clone.
 func withRemote(t *testing.T) (*repo, *repo) {
 	up := newRepo(t)
 	bare := t.TempDir()
@@ -324,6 +368,8 @@ func withRemote(t *testing.T) (*repo, *repo) {
 	return up, clone
 }
 
+// TestMakeBranchMatchRemote proves "sync with remote", choosing to delete local work, drops a
+// local commit and an uncommitted edit so the branch matches the remote exactly.
 func TestMakeBranchMatchRemote(t *testing.T) {
 	_, c := withRemote(t)
 	c.commit("local junk", "junk.txt", "j\n")
@@ -333,6 +379,8 @@ func TestMakeBranchMatchRemote(t *testing.T) {
 	expect(t, "status", c.git("status", "--porcelain"), "", out)
 }
 
+// TestResetBranchToMaster proves "reset branch to" moves the current branch to another branch's
+// commit.
 func TestResetBranchToMaster(t *testing.T) {
 	r := newRepo(t)
 	r.git("switch", "-q", "-c", "feature", "HEAD~2")
@@ -341,6 +389,8 @@ func TestResetBranchToMaster(t *testing.T) {
 	expect(t, "feature", r.git("rev-parse", "feature"), r.git("rev-parse", "main"), out)
 }
 
+// TestDeleteBranch proves "delete branch", choosing "only on my computer", deletes the local
+// branch.
 func TestDeleteBranch(t *testing.T) {
 	r := newRepo(t)
 	r.git("branch", "old", "HEAD~1")
@@ -348,6 +398,9 @@ func TestDeleteBranch(t *testing.T) {
 	expect(t, "branches", r.git("branch", "--format=%(refname:short)"), "main", out)
 }
 
+// TestMergeConflictResolveContinue proves the whole conflict path: the merge preview predicts
+// the conflict and points to "gitwhy resolve", resolve keeps the chosen side, and continue
+// finishes with a merge commit.
 func TestMergeConflictResolveContinue(t *testing.T) {
 	r := newRepo(t)
 	r.git("switch", "-q", "-c", "other")
@@ -367,6 +420,8 @@ func TestMergeConflictResolveContinue(t *testing.T) {
 	}
 }
 
+// TestAbortRebase proves "gitwhy abort" cancels a rebase stopped on a conflict that was started
+// in plain git, and puts HEAD back where it was.
 func TestAbortRebase(t *testing.T) {
 	r := newRepo(t)
 	r.git("switch", "-q", "-c", "other", "HEAD~1")
@@ -379,6 +434,8 @@ func TestAbortRebase(t *testing.T) {
 	expect(t, "HEAD", r.git("rev-parse", "HEAD"), before, out)
 }
 
+// TestStashRoundTrip proves stashing saves a tracked edit and an untracked file, and popping the
+// stash brings both back.
 func TestStashRoundTrip(t *testing.T) {
 	r := newRepo(t)
 	r.write("f1.txt", "wip\n")
@@ -389,6 +446,8 @@ func TestStashRoundTrip(t *testing.T) {
 	expect(t, "back", r.read("f1.txt")+r.read("new.txt"), "wip\nn\n", out)
 }
 
+// TestRemoveFileFromHistory proves the git-filter-repo recipe removes a file from every commit
+// and from the working tree. It is skipped when git-filter-repo is not installed.
 func TestRemoveFileFromHistory(t *testing.T) {
 	if exec.Command("git", "filter-repo", "--version").Run() != nil {
 		t.Skip("git-filter-repo not installed")
@@ -399,6 +458,8 @@ func TestRemoveFileFromHistory(t *testing.T) {
 	expect(t, "f2 file", r.read("f2.txt"), "<missing>", out)
 }
 
+// TestLFSTrack proves the LFS recipe writes the right .gitattributes line. It is skipped when
+// git-lfs is not installed.
 func TestLFSTrack(t *testing.T) {
 	if exec.Command("git", "lfs", "version").Run() != nil {
 		t.Skip("git-lfs not installed")
@@ -409,6 +470,8 @@ func TestLFSTrack(t *testing.T) {
 	expect(t, ".gitattributes", strings.ReplaceAll(r.read(".gitattributes"), "\r\n", "\n"), "*.bin filter=lfs diff=lfs merge=lfs -text\n", out)
 }
 
+// TestRunWithPreviewAndUndo proves "gitwhy run git clean -fd" shows what it will delete, deletes
+// the untracked file, and that undo brings the file back from the snapshot.
 func TestRunWithPreviewAndUndo(t *testing.T) {
 	r := newRepo(t)
 	r.write("u.txt", "untracked\n")
@@ -421,6 +484,8 @@ func TestRunWithPreviewAndUndo(t *testing.T) {
 	expect(t, "restored", r.read("u.txt"), "untracked\n", out)
 }
 
+// TestRecoverPlainGitPull proves "gitwhy recover" finds a pull done in plain git (no snapshot)
+// in the reflog and goes back to before it.
 func TestRecoverPlainGitPull(t *testing.T) {
 	up, c := withRemote(t)
 	up.commit("upstream 1", "u1.txt", "1\n")
@@ -431,6 +496,7 @@ func TestRecoverPlainGitPull(t *testing.T) {
 	expect(t, "after recover", c.subjects(), "c4\nc3\nc2\nc1", out)
 }
 
+// TestExplainAndSearch proves "gitwhy explain" describes each part of a command, and that unknown words ("gitwhy undo last commit") are a search whose result runs.
 func TestExplainAndSearch(t *testing.T) {
 	r := newRepo(t)
 	out := drive(t, r.dir, []string{"explain", "git", "reset", "--hard", "HEAD~1"})
@@ -443,6 +509,8 @@ func TestExplainAndSearch(t *testing.T) {
 	expect(t, "searched and ran", r.subjects(), "c3\nc2\nc1", out)
 }
 
+// TestBuilder proves the command builder: picked flags are added, a long flag's value is joined
+// with "=", the command is shown quoted for copy-paste, and it runs.
 func TestBuilder(t *testing.T) {
 	r := newRepo(t)
 	// git commit, flags: --allow-empty and --message (asks a value), nothing else.
@@ -453,6 +521,8 @@ func TestBuilder(t *testing.T) {
 	}
 }
 
+// TestRemoveFileFromHistoryThenUndo proves undo reverses a full history rewrite by
+// git-filter-repo: the old HEAD and the removed file come back.
 func TestRemoveFileFromHistoryThenUndo(t *testing.T) {
 	if exec.Command("git", "filter-repo", "--version").Run() != nil {
 		t.Skip("git-filter-repo not installed")
@@ -466,6 +536,9 @@ func TestRemoveFileFromHistoryThenUndo(t *testing.T) {
 	expect(t, "f2 back", r.read("f2.txt"), "2\n", out)
 }
 
+// TestDeleteBranchUsesItsUpstream is a regression test: deleting a branch on the remote must
+// delete the branch it tracks (team/fix), not a different remote branch with the same short
+// name (fix).
 func TestDeleteBranchUsesItsUpstream(t *testing.T) {
 	_, c := withRemote(t)
 	c.git("push", "-q", "origin", "HEAD:refs/heads/team/fix")
@@ -478,6 +551,8 @@ func TestDeleteBranchUsesItsUpstream(t *testing.T) {
 	}
 }
 
+// TestRunFromSubfolder proves a typed command runs in the folder gitwhy was started from, as in
+// plain git: "restore ." in a subfolder must not touch files at the root.
 func TestRunFromSubfolder(t *testing.T) {
 	r := newRepo(t)
 	r.commit("sub", "sub/s.txt", "s\n")
@@ -488,6 +563,8 @@ func TestRunFromSubfolder(t *testing.T) {
 	expect(t, "root kept", r.read("f1.txt"), "root edit\n", out)
 }
 
+// TestRunRefusesGlobalOptions proves "gitwhy run" refuses git's global options such as -C,
+// which would run the command in another repository than the one the snapshot is taken of.
 func TestRunRefusesGlobalOptions(t *testing.T) {
 	r := newRepo(t)
 	out := drive(t, r.dir, []string{"run", "-C", "..", "reset", "--hard"})
@@ -496,6 +573,8 @@ func TestRunRefusesGlobalOptions(t *testing.T) {
 	}
 }
 
+// TestFixupLeavesOtherStagedChanges is a regression test: "fix past commit" must commit only
+// the picked file, not other changes that were already staged, and must keep those changes.
 func TestFixupLeavesOtherStagedChanges(t *testing.T) {
 	r := newRepo(t)
 	r.write("f1.txt", "unrelated staged\n")
@@ -508,6 +587,8 @@ func TestFixupLeavesOtherStagedChanges(t *testing.T) {
 	expect(t, "unrelated kept", r.read("f1.txt"), "unrelated staged\n", out)
 }
 
+// TestPushedCommitWarning proves rewording a commit that is already on the remote warns about
+// it, and that answering No at the warning runs nothing.
 func TestPushedCommitWarning(t *testing.T) {
 	_, c := withRemote(t)
 	c.commit("local only", "l.txt", "l\n")
@@ -518,6 +599,8 @@ func TestPushedCommitWarning(t *testing.T) {
 	expect(t, "nothing ran", c.git("log", "-1", "--format=%s", "HEAD~2"), "c3", out)
 }
 
+// TestNewRecipes runs four smaller recipes end to end: create a tag on an older commit, restore
+// a file from a commit, stop tracking a file but keep it on disk, and change a commit's author.
 func TestNewRecipes(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("create-tag", text("v1.0.0"), commit("c3"), text("first release"), text("n"), yes)
@@ -535,6 +618,8 @@ func TestNewRecipes(t *testing.T) {
 	expect(t, "author", r.git("log", "-1", "--format=%an <%ae>"), "Ada <ada@example.com>", out)
 }
 
+// TestBisectRecipe proves the bisect recipe finds the first bad commit with a test command and
+// ends the bisect, so the user is back on their branch.
 func TestBisectRecipe(t *testing.T) {
 	r := newRepo(t) // f3.txt appears in c3: "test" fails once it exists
 	out := r.do("find-bug-commit", commit("c1"), text("test ! -e f3.txt"), yes)
@@ -544,6 +629,8 @@ func TestBisectRecipe(t *testing.T) {
 	expect(t, "back on main", r.git("branch", "--show-current"), "main", out)
 }
 
+// TestHookUndoesPlainGit proves the bash hook takes a snapshot before a plain "git reset --hard",
+// so "gitwhy undo" brings the lost edit back. It is skipped when bash is missing.
 func TestHookUndoesPlainGit(t *testing.T) {
 	bash, err := exec.LookPath("bash")
 	if err != nil {

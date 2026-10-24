@@ -15,8 +15,10 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/ui"
 )
 
+// version is the release version, set at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
+// usage is the help text for -h, --help and "gitwhy help".
 const usage = `gitwhy: do anything with git, see what it will do first, and undo it.
 
 Usage:
@@ -40,6 +42,8 @@ Flags:
   -q, --quiet   don't explain each part of commands (or set GITWHY_EXPLAIN=0)
 `
 
+// main runs gitwhy and turns its error into an exit status: git's own status when git failed
+// in the terminal, 1 without a message when the user cancelled, and 1 with a message otherwise.
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		var gf ui.GitFailed
@@ -54,6 +58,8 @@ func main() {
 	}
 }
 
+// run routes the command line to the matching App method. Words that are not a known command
+// are a search query.
 func run(args []string) error {
 	// git runs us as the rebase sequence editor: gitwhy __todo <plan> <todo-file>.
 	if len(args) == 3 && args[0] == "__todo" {
@@ -105,7 +111,8 @@ func run(args []string) error {
 		}
 		return app.Home()
 	}
-	// "gitwhy undo" is the undo command, but "gitwhy undo last commit" is a search.
+	// "gitwhy undo" is the undo command, but "gitwhy undo last commit" is a search. The same goes
+	// for recover, resolve, continue and abort: with more words they fall through to Search.
 	words := len(rest)
 	if words > 1 && rest[0] == "undo" && (rest[1] == "--list" || rest[1] == "-l") {
 		words = 1
@@ -157,6 +164,9 @@ func run(args []string) error {
 	return app.Search(strings.Join(rest, " "))
 }
 
+// hookCmd handles "gitwhy hook init|install|uninstall". install edits the startup file of the
+// shell in $SHELL; uninstall removes the hook from both the bash and zsh files, so it works
+// even after the user changed shells.
 func hookCmd(args []string) error {
 	switch args[0] {
 	case "init":
@@ -211,7 +221,8 @@ func hookCmd(args []string) error {
 	return fmt.Errorf("unknown hook command %q: use init, install or uninstall", args[0])
 }
 
-// checkGit needs git 2.40+: previews use "merge-tree --write-tree --merge-base".
+// checkGit returns an error unless git 2.40 or newer is installed: previews use
+// "merge-tree --write-tree --merge-base".
 func checkGit() error {
 	major, minor, err := git.Version()
 	if err != nil {

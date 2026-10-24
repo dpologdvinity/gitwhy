@@ -8,7 +8,8 @@ import (
 
 // TestTypedRunnerGlobs proves that a typed command (a literal job) runs with git's normal
 // pathspec globbing even when GIT_LITERAL_PATHSPECS=1 is set for gitwhy's own git calls, while
-// recipe steps keep literal paths.
+// recipe steps keep literal paths. Without this, "gitwhy run git add '*.txt'" would match no
+// files, and a recipe given a file named "*.txt" could touch other files.
 func TestTypedRunnerGlobs(t *testing.T) {
 	t.Setenv("GIT_LITERAL_PATHSPECS", "1")
 	r := testrepo.New(t)

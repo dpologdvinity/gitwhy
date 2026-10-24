@@ -9,6 +9,9 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestLoadRealRecipes proves that every shipped recipe loads and validates, that every template
+// in it (step args, "when", question texts and sources, predict and explain) parses and runs, and
+// that every "suggest" names a recipe that exists.
 func TestLoadRealRecipes(t *testing.T) {
 	rs, err := Load(os.DirFS("../.."))
 	if err != nil {
@@ -125,6 +128,7 @@ func TestDeleteUntrackedPreset(t *testing.T) {
 	}
 }
 
+// hasID reports whether a recipe with the given ID is in rs.
 func hasID(rs []*Recipe, id string) bool {
 	for _, r := range rs {
 		if r.ID == id {
@@ -134,6 +138,9 @@ func hasID(rs []*Recipe, id string) bool {
 	return false
 }
 
+// TestArgsSplatAndDrop proves the Args rules: a lone "{{.files}}" list answer becomes several
+// arguments (spaces kept inside each), an empty "{{if ...}}" argument is dropped, and any other
+// empty value stays as "" so a missing answer cannot shift the other arguments.
 func TestArgsSplatAndDrop(t *testing.T) {
 	s := Step{Git: []string{"merge", "{{if .mode}}{{.mode}}{{end}}", "--", "{{.files}}", "x{{.n}}", "-m", "{{.msg}}"}}
 	got, err := Args(s, Answers{"mode": "", "files": []string{"a b", "c"}, "n": "1", "msg": ""})
@@ -146,6 +153,8 @@ func TestArgsSplatAndDrop(t *testing.T) {
 	}
 }
 
+// TestTruthy proves that an empty "when" is true, a template is true or false by its output, and
+// a missing answer is false.
 func TestTruthy(t *testing.T) {
 	for tmpl, want := range map[string]bool{"": true, `{{eq .a "x"}}`: true, `{{eq .a "y"}}`: false, "{{.missing}}": false} {
 		got, err := Truthy(tmpl, Answers{"a": "x"})

@@ -12,7 +12,10 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/todo"
 )
 
-// builtins are answers every recipe can use.
+// builtins returns the answers every recipe can use without asking: head (empty in a repository
+// with no commits), branch ("HEAD" when detached), upstream, remote (the branch's remote, else
+// origin, else the first remote), op (the operation in progress) and local_refs (every local
+// branch and tag ref).
 func (a *App) builtins() recipe.Answers {
 	r := a.Repo
 	ans := recipe.Answers{}
@@ -45,12 +48,15 @@ func (a *App) builtins() recipe.Answers {
 func (a *App) RunRecipe(r *recipe.Recipe) error { return a.RunRecipeWith(r, nil) }
 
 // RunRecipeWith runs a recipe with some answers already given (e.g. the commit picked in the TUI);
-// those questions are skipped.
+// those questions are skipped. Before asking anything it runs the recipe's checks: a blocking
+// check stops and offers the suggested recipe, a warning check may offer to switch to it.
+// Questions that a step asks mid-recipe are left for execute.
 func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 	if err := a.needRepo(); err != nil {
 		return err
 	}
 	ans := a.builtins()
+	// Preset answers get the same derived answers (_base, _local, _from and so on) as asked ones.
 	for k, v := range preset {
 		ans[k] = v
 		if q := r.Question(k); q != nil && q.Type == "commit" {
@@ -73,6 +79,7 @@ func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 		warn(c.Warn)
 		if c.Suggest != "" {
 			if s := a.recipe(c.Suggest); s != nil {
+				// Default No: the user chose this recipe; the warning only offers another.
 				use, err := Confirm("Do \""+s.Title+"\" instead?", false)
 				if err != nil {
 					return err
@@ -101,6 +108,8 @@ func (a *App) RunRecipeWith(r *recipe.Recipe, preset recipe.Answers) error {
 	return a.execute(job{title: r.Title, r: r, steps: r.Steps, ans: ans, predict: predict})
 }
 
+// offer asks whether to run the recipe a blocking check suggests, defaulting to Yes because the
+// picked recipe cannot run. With no suggestion, or a declined one, it returns ErrCancelled or nil.
 func (a *App) offer(id string) error {
 	if id == "" {
 		return ErrCancelled
@@ -118,6 +127,7 @@ func (a *App) offer(id string) error {
 
 // ask asks one question and stores the answer (plus derived answers) in ans.
 func (a *App) ask(q *recipe.Question, ans recipe.Answers) error {
+	// A question whose "when" is false is answered with "" so templates that use it still render.
 	if ok, err := recipe.Truthy(q.When, ans); err != nil || !ok {
 		if err == nil {
 			ans[q.ID] = ""
@@ -189,6 +199,9 @@ func (a *App) ask(q *recipe.Question, ans recipe.Answers) error {
 	return cancelled(err)
 }
 
+// askBranch asks for a branch from q.Source ("local", "remote", or both), most recently
+// changed first. Remote-tracking branches are shown without "refs/remotes/", so they read as
+// origin/feat, and remote HEAD aliases are left out. def is preselected only if it is listed.
 func (a *App) askBranch(q *recipe.Question, title, def string, ans recipe.Answers) error {
 	var refs []string
 	switch q.Source {
@@ -259,6 +272,8 @@ func (a *App) deriveBranch(id, v string, ans recipe.Answers) {
 	ans[id+"_local"], ans[id+"_track"] = local, track
 }
 
+// askCommit asks for one of the last 60 first-parent commits of q.Source (a revision or range
+// template, HEAD by default). The trailing "--" stops git reading the source as a file name.
 func (a *App) askCommit(q *recipe.Question, title string, ans recipe.Answers) error {
 	src := "HEAD"
 	if q.Source != "" {
@@ -306,6 +321,10 @@ func (a *App) pushed(commit string) string {
 	return fmt.Sprint(strings.TrimSpace(out) != "")
 }
 
+// askFiles asks for one file, or several when q.Multi, from q.Source: staged, unstaged,
+// conflicted, untracked, tracked, or (the default) every changed file. Paths come from -z
+// output, so unusual file names are never quoted or mangled. With q.Partial at least one file
+// must be left unpicked, for recipes that split changes in two.
 func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) error {
 	var out string
 	var err error
@@ -423,6 +442,7 @@ func statusPaths(out string) ([]string, map[string]string) {
 	return paths, from
 }
 
+// splitZ splits NUL-separated git output into its non-empty fields.
 func splitZ(s string) []string {
 	var out []string
 	for _, p := range strings.Split(s, "\x00") {
@@ -433,6 +453,7 @@ func splitZ(s string) []string {
 	return out
 }
 
+// trunc shortens s to at most n characters (runes), ending with "…" when it cut something.
 func trunc(s string, n int) string {
 	if len([]rune(s)) <= n {
 		return s
@@ -440,13 +461,17 @@ func trunc(s string, n int) string {
 	return string([]rune(s)[:n-1]) + "…"
 }
 
+// todoItem is one line of the todo list being edited: the todo entry plus what to show for it.
 type todoItem struct {
 	todo.Item
-	short, subject string
+	short, subject string // abbreviated hash and commit subject, for labels
 }
 
-// askTodo lets the user reorder, drop, squash, fixup or reword recent commits.
+// askTodo lets the user reorder, drop, squash, fixup or reword recent commits. Only the actions
+// in q.Actions are offered. The finished plan is written to a file whose path becomes the
+// answer, plus <id>_base (the parent of the oldest commit, or --root) and <id>_pushed.
 func (a *App) askTodo(q *recipe.Question, title string, ans recipe.Answers) error {
+	// Default to the unpushed commits when there are 1 to 30 of them, else the last 10.
 	n := "10"
 	if c, err := a.Repo.Output("rev-list", "--count", "@{upstream}..HEAD"); err == nil && c != "0" {
 		if v, _ := strconv.Atoi(c); v <= 30 {
@@ -471,7 +496,7 @@ func (a *App) askTodo(q *recipe.Question, title string, ans recipe.Answers) erro
 		if len(f) != 4 {
 			continue
 		}
-		if strings.Contains(f[3], " ") {
+		if strings.Contains(f[3], " ") { // %P lists more than one parent: a merge
 			return fmt.Errorf("those commits include a merge commit; this editor can't rewrite merges safely")
 		}
 		items = append(items, todoItem{Item: todo.Item{Action: "pick", Commit: f[0]}, short: f[1], subject: f[2]})
@@ -483,6 +508,7 @@ func (a *App) askTodo(q *recipe.Question, title string, ans recipe.Answers) erro
 	for _, act := range q.Actions {
 		allowed[act] = true
 	}
+	// Loop until Done: pick a commit, then what to do with it. Cancel aborts the whole recipe.
 	for {
 		var pick string
 		var opts []huh.Option[string]

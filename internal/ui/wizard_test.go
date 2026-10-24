@@ -10,12 +10,14 @@ import (
 // TestDeriveBranchLocalAndTrack proves which local branch a branch answer resolves to: a remote
 // branch with no local branch of that name (picked as "origin/feat", or passed by the TUI as
 // "feat") becomes a new local branch that tracks it, and an existing local branch is used as is.
+// This matters because switching to "origin/feat" directly would fail or detach HEAD.
 func TestDeriveBranchLocalAndTrack(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "a\n")
 	r.Git("remote", "add", "origin", "https://example.com/x.git")
 	r.Git("update-ref", "refs/remotes/origin/feat", "HEAD")
 	a := &App{Repo: r.Repo}
+	// check derives answers for branch v and compares target_local and target_track.
 	check := func(v, local, track string) {
 		t.Helper()
 		ans := recipe.Answers{}

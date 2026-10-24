@@ -21,13 +21,13 @@ import (
 
 // App holds everything the UI needs.
 type App struct {
-	KB      *kb.KB
-	Recipes []*recipe.Recipe
-	Index   *search.Index
-	Repo    *git.Repo // nil outside a repository
-	Self    string    // path of the gitwhy binary, for the rebase sequence editor
-	Quiet   bool      // hide the teaching breakdown
-	Cwd     string    // where gitwhy was started; literal commands run here
+	KB      *kb.KB           // the embedded command reference
+	Recipes []*recipe.Recipe // every embedded recipe
+	Index   *search.Index    // search over recipes, commands and flags, built once by New
+	Repo    *git.Repo        // nil outside a repository
+	Self    string           // path of the gitwhy binary, for the rebase sequence editor
+	Quiet   bool             // hide the teaching breakdown
+	Cwd     string           // where gitwhy was started; literal commands run here
 }
 
 // New loads the knowledge base and recipes from content and opens the repo around the cwd.
@@ -43,7 +43,7 @@ func New(content fs.FS) (*App, error) {
 	a := &App{KB: k, Recipes: rs, Index: search.New(k, rs)}
 	if wd, err := os.Getwd(); err == nil {
 		a.Cwd = wd
-		a.Repo, _ = git.Open(wd)
+		a.Repo, _ = git.Open(wd) // outside a repository Repo stays nil; needRepo reports it
 	}
 	a.Self, _ = os.Executable()
 	a.Quiet = os.Getenv("GITWHY_EXPLAIN") == "0"
@@ -57,6 +57,7 @@ var ErrCancelled = errors.New("cancelled")
 // The program exits with Code (git's exit status) and prints nothing more.
 type GitFailed struct{ Code int }
 
+// Error describes the exit status; main does not print it.
 func (e GitFailed) Error() string { return fmt.Sprintf("git exited with status %d", e.Code) }
 
 // passthrough turns the error of a git command run straight through (stderr shown to the user)
@@ -68,6 +69,7 @@ func passthrough(err error) error {
 	return err
 }
 
+// cancelled turns huh's "user aborted" (Ctrl+C, Esc, end of input) into ErrCancelled.
 func cancelled(err error) error {
 	if errors.Is(err, huh.ErrUserAborted) {
 		return ErrCancelled
@@ -75,6 +77,7 @@ func cancelled(err error) error {
 	return err
 }
 
+// needRepo returns a plain error when gitwhy was not started inside a git repository.
 func (a *App) needRepo() error {
 	if a.Repo == nil {
 		return errors.New("not inside a git repository (run this from a project folder)")
@@ -82,6 +85,7 @@ func (a *App) needRepo() error {
 	return nil
 }
 
+// recipe returns the recipe with the given ID, or nil.
 func (a *App) recipe(id string) *recipe.Recipe {
 	for _, r := range a.Recipes {
 		if r.ID == id {
@@ -91,7 +95,8 @@ func (a *App) recipe(id string) *recipe.Recipe {
 	return nil
 }
 
-// Styles.
+// Styles for titles, commands, tokens, dim notes, warnings, failures and success. init
+// replaces them all with a plain style when output is not a color terminal.
 var (
 	titleStyle = lipgloss.NewStyle().Bold(true)
 	cmdStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
@@ -102,10 +107,13 @@ var (
 	okStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 )
 
+// say prints one formatted line to stdout.
 func say(format string, args ...any) { lipgloss.Println(fmt.Sprintf(format, args...)) }
 
+// heading prints a bold section title after a blank line.
 func heading(s string) { lipgloss.Println("\n" + titleStyle.Render(s)) }
 
+// warn prints a warning line with a warning sign.
 func warn(s string) { lipgloss.Println(warnStyle.Render("⚠ " + s)) }
 
 // showCommand prints a git command and, unless quiet, what each part means.
@@ -115,6 +123,7 @@ func (a *App) showCommand(args []string) {
 		return
 	}
 	parts := explain.Explain(a.KB, a.Repo, args)
+	// Align meanings after the longest token, but let tokens over 24 characters overflow.
 	w := 0
 	for _, p := range parts {
 		if n := len(p.Token); n > w && n <= 24 {
@@ -136,7 +145,8 @@ func brief(s string) string {
 	return s
 }
 
-// shellJoin quotes args that need it, for display and copy-paste.
+// shellJoin quotes args that need it, for display and copy-paste. It uses POSIX single
+// quotes, so the output is meant for sh-like shells.
 func shellJoin(args []string) string {
 	out := make([]string, len(args))
 	for i, s := range args {
@@ -153,8 +163,8 @@ func shellJoin(args []string) string {
 func shellSplit(s string) ([]string, error) {
 	var out []string
 	var cur strings.Builder
-	in := false
-	var q rune
+	in := false // inside a word; true even for an empty quoted word such as ''
+	var q rune  // the open quote character, or 0
 	esc := false
 	for _, r := range s {
 		switch {
@@ -193,7 +203,7 @@ func shellSplit(s string) ([]string, error) {
 	return out, nil
 }
 
-// Confirm asks a yes/no question.
+// Confirm asks a yes/no question; def is the answer when the user just presses Enter.
 func Confirm(title string, def bool) (bool, error) {
 	v := def
 	err := prompt(huh.NewConfirm().Title(title).Affirmative("Yes").Negative("No").Value(&v))
@@ -204,6 +214,8 @@ func Confirm(title string, def bool) (bool, error) {
 // set ACCESSIBLE=1 or GITWHY_ACCESSIBLE=1.
 var accessible = os.Getenv("ACCESSIBLE") != "" || os.Getenv("GITWHY_ACCESSIBLE") != ""
 
+// prompt runs one form field: as a full-screen huh form, or as plain text prompts when
+// accessible is set. A user abort or end of input returns huh.ErrUserAborted.
 func prompt(f huh.Field) (err error) {
 	if accessible {
 		defer func() {
@@ -228,6 +240,7 @@ var errEOF = errors.New("end of input")
 // swallows the answers meant for the next prompts. At end of input it panics with errEOF.
 type lineReader struct{}
 
+// Read reads one byte at a time up to and including the next newline.
 func (lineReader) Read(p []byte) (int, error) {
 	n := 0
 	for n < len(p) {
@@ -246,6 +259,7 @@ func (lineReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// init turns off all styles in accessible mode, with NO_COLOR, or when stdout is not a terminal.
 func init() {
 	// Plain text for screen readers, pipes and logs: no colors baked into prompt labels.
 	if fi, err := os.Stdout.Stat(); accessible || os.Getenv("NO_COLOR") != "" || err != nil || fi.Mode()&os.ModeCharDevice == 0 {
