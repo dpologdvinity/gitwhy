@@ -2,6 +2,7 @@ package preview
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -132,7 +133,10 @@ func TestCleanPreviewSaveIsRelativeToTheRepoRoot(t *testing.T) {
 func TestCleanPreviewSaveHandlesQuotedNames(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", ".gitignore", "*.log\n")
-	names := []string{"secret-é.log", `q"uote.log`, "sp ace.log"}
+	names := []string{"secret-é.log", "sp ace.log"}
+	if runtime.GOOS != "windows" { // Windows cannot create a file name with a double quote
+		names = append(names, `q"uote.log`)
+	}
 	for _, n := range names {
 		r.Write(n, "x\n")
 	}
