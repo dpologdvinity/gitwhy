@@ -9,7 +9,7 @@ builds:
     ldflags: ["-s -w -X main.version={{.Version}}"]
 archives:
   - formats: [tar.gz]
-    files: [LICENSE, README.md]
+    files: [LICENSE, THIRD_PARTY_LICENSES, README.md]
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -21,10 +21,22 @@ nfpms:
     description: Do anything with git without looking it up, with previews and undo
     license: MIT
     formats: [deb, rpm, apk, archlinux]
-    dependencies: [git]
+    # Previews need git 2.40+ (merge-tree --write-tree --merge-base). Each format writes the
+    # version constraint its own way; Debian's git has epoch 1, hence "1:".
+    overrides:
+      deb:
+        dependencies: ["git (>= 1:2.40)"]
+      rpm:
+        dependencies: ["git >= 2.40"]
+      apk:
+        dependencies: ["git>=2.40"]
+      archlinux:
+        dependencies: ["git>=2.40"]
     contents:
       - src: LICENSE
         dst: /usr/share/doc/gitwhy/LICENSE
+      - src: THIRD_PARTY_LICENSES
+        dst: /usr/share/doc/gitwhy/THIRD_PARTY_LICENSES
 checksum:
   name_template: checksums.txt
 homebrew_casks:
