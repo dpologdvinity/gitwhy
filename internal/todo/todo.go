@@ -51,6 +51,15 @@ type line struct {
 	rest   string // subject
 }
 
+// commands are the todo commands git writes or accepts, long and short forms.
+var commands = map[string]bool{
+	"pick": true, "p": true, "reword": true, "r": true, "edit": true, "e": true,
+	"squash": true, "s": true, "fixup": true, "f": true, "exec": true, "x": true,
+	"break": true, "b": true, "drop": true, "d": true, "label": true, "l": true,
+	"reset": true, "t": true, "merge": true, "m": true, "update-ref": true, "u": true,
+	"noop": true,
+}
+
 func isPick(a string) bool { return a == "pick" || a == "p" }
 
 // Apply rewrites the todo file at todoPath according to the plan at planPath.
@@ -71,8 +80,12 @@ func Apply(planPath, todoPath string) error {
 	for _, t := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
 		l := line{text: t}
 		f := strings.Fields(t)
-		if len(f) >= 2 && !strings.HasPrefix(t, "#") {
-			l.action, l.commit = f[0], f[1]
+		// Anything that does not start with a todo command is a comment, whatever core.commentChar is.
+		if len(f) >= 1 && commands[f[0]] {
+			l.action = f[0]
+		}
+		if l.action != "" && len(f) >= 2 {
+			l.commit = f[1]
 			l.rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t), f[0]+" "+f[1]))
 		}
 		lines = append(lines, l)
