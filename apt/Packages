@@ -30,3 +30,35 @@ SHA512: af221a09583ab00488c94196216cafaac079a3f2961e4dedc8bd585eb5f2a11f06755c88
 Homepage: https://github.com/dpologdvinity/gitwhy
 Description: Do anything with git without looking it up, with previews and undo
 
+Package: gitwhy
+Architecture: amd64
+Version: 0.9.0
+Priority: optional
+Maintainer: Kaitlyn Bassford <dpologdvinity@users.noreply.github.com>
+Installed-Size: 8262
+Depends: git (>= 1:2.40)
+Filename: ./gitwhy_0.9.0_linux_amd64.deb
+Size: 3135604
+MD5sum: 262d886905e83f18dfa9e1f4de356860
+SHA1: e870ec39c305936ab26f60a1f5003ea22e53bd8a
+SHA256: ad4112a13514b68716438a80f3885dc282f0e57a60c9dc63d935cc54819f2728
+SHA512: 9898e133fe7d0e135085429129c67088836c82beac0c87f0def2fbc4e1699fb3deb068eaf6f73a4a215eb78d37a0eed4ae1b5c81661978d1841dcfb01462b489
+Homepage: https://github.com/dpologdvinity/gitwhy
+Description: Do anything with git without looking it up, with previews and undo
+
+Package: gitwhy
+Architecture: arm64
+Version: 0.9.0
+Priority: optional
+Maintainer: Kaitlyn Bassford <dpologdvinity@users.noreply.github.com>
+Installed-Size: 7846
+Depends: git (>= 1:2.40)
+Filename: ./gitwhy_0.9.0_linux_arm64.deb
+Size: 2857322
+MD5sum: 672f7383bc5d7faa85b430e2465c7a93
+SHA1: c2fc5c5dfefa7bb5dbb4aa329f314070e4718783
+SHA256: 7980c1b88fe54ca466b5d0927bccc4e43f8ab0e8b09892718c12f7ff3dc616f0
+SHA512: 57b61bbe5f78b8e137c04a75ebb6038644bd5a5c5c8225e10ad7e1d0a02558085c41ddcabc3ca5f39400d5b8a732c171494ff55f6098c0fa168e9eef6b6b4ffe
+Homepage: https://github.com/dpologdvinity/gitwhy
+Description: Do anything with git without looking it up, with previews and undo
+
