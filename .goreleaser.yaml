@@ -33,6 +33,13 @@ homebrew_casks:
     homepage: https://github.com/dpologdvinity/gitwhy
     description: "Do anything with git without looking it up, with previews and undo"
     license: MIT
+    # Our binaries are not signed or notarized: without this, macOS Gatekeeper blocks the first run.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/gitwhy"]
+          end
     repository:
       owner: dpologdvinity
       name: homebrew-gitwhy
