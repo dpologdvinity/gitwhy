@@ -515,6 +515,67 @@ func TestRedoLeavesLaterRefsAlone(t *testing.T) {
 	}
 }
 
+// TestHeadBranchChangedLaterKeepsFiles proves that when the branch HEAD is on moved after the
+// action, undo leaves HEAD, the index and the files alone instead of restoring old files under
+// the new commit.
+func TestHeadBranchChangedLaterKeepsFiles(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Commit("two", "a.txt", "2\n")
+	s, err := Take(r.Repo, "git reset --hard HEAD~1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("reset", "-q", "--hard", "HEAD~1")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	later := r.Commit("later", "b.txt", "b\n")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("rev-parse", "HEAD"); got != later {
+		t.Errorf("HEAD moved")
+	}
+	if r.Read("b.txt") != "b\n" {
+		t.Errorf("b.txt = %q", r.Read("b.txt"))
+	}
+	if st := r.Git("status", "--porcelain"); st != "" {
+		t.Errorf("status = %q", st)
+	}
+	if len(res.Skipped) != 2 {
+		t.Errorf("skipped = %q", res.Skipped)
+	}
+}
+
+// TestHeadBranchInOtherWorktreeIsNotCheckedOut proves undo never checks out a branch that is
+// now checked out in another worktree.
+func TestHeadBranchInOtherWorktreeIsNotCheckedOut(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Git("switch", "-q", "-c", "feat")
+	s, err := Take(r.Repo, "git switch main", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("switch", "-q", "main")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	r.Git("worktree", "add", "-q", filepath.Join(t.TempDir(), "wt"), "feat")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("symbolic-ref", "HEAD"); got != "refs/heads/main" {
+		t.Errorf("HEAD = %q, want main", got)
+	}
+	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "feat") {
+		t.Errorf("skipped = %q", res.Skipped)
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()

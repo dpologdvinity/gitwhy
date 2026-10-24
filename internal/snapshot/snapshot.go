@@ -352,6 +352,7 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	// are put back, so a failure here changes nothing.
 	elsewhere := checkedOutElsewhere(r)
 	var dels, ups, undel strings.Builder
+	skipped := map[string]bool{}
 	names := map[string]bool{}
 	for n := range s.Refs {
 		names[n] = true
@@ -374,15 +375,18 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 		if s.After != nil {
 			if after, ok := s.After[name]; after != now || ok != has {
 				res.Skipped = append(res.Skipped, short+" changed after this action, so it was left as is")
+				skipped[name] = true
 				continue
 			}
 		}
 		if elsewhere[name] {
 			res.Skipped = append(res.Skipped, short+" is checked out in another worktree, so it was left as is")
+			skipped[name] = true
 			continue
 		}
 		if had && missing[want] {
 			res.Skipped = append(res.Skipped, short+" can't go back: its old commits are gone")
+			skipped[name] = true
 			continue
 		}
 		switch {
@@ -406,67 +410,12 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 		return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
 	}
 
-	// 2. HEAD.
-	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok {
-		_, err = r.Output("symbolic-ref", "HEAD", ref)
-	} else {
-		_, err = r.Output("update-ref", "--no-deref", "HEAD", s.Head)
-	}
-	if err != nil {
-		return res, fmt.Errorf("restoring HEAD: %w", err)
-	}
-
-	// 3. Working files: delete files added since, rewrite files that differ.
-	if err := restoreFiles(r, s.Work, cur.Work); err != nil {
+	// 2-5. HEAD, files, index and operation state, unless the branch HEAD goes back to was left
+	// alone: old files under a newer commit, or a branch checked out twice, would be wrong.
+	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok && (skipped[ref] || elsewhere[ref]) {
+		res.Skipped = append(res.Skipped, "HEAD, the index and your files were left as they are, because "+shortRef(ref)+" was left as is")
+	} else if err := restoreCheckout(r, s, cur); err != nil {
 		return res, err
-	}
-
-	// 4. Sparse-checkout settings, then the index.
-	for _, f := range sparseFiles {
-		os.Remove(filepath.Join(r.GitDir, f))
-	}
-	for _, f := range s.Files {
-		if err := copyFile(filepath.Join(s.dir, "sparse", f), filepath.Join(r.GitDir, f)); err != nil {
-			return res, err
-		}
-	}
-	for _, k := range sparseKeys {
-		if v := s.Sparse[k]; v != "" {
-			if _, err := r.Output("config", k, v); err != nil {
-				return res, fmt.Errorf("restoring %s: %w", k, err)
-			}
-		} else if r.OK("config", "--get", k) {
-			if _, err := r.Output("config", "--unset", k); err != nil {
-				return res, fmt.Errorf("restoring %s: %w", k, err)
-			}
-		}
-	}
-	idx := filepath.Join(r.GitDir, "index")
-	if s.HasIdx {
-		if err := copyFile(filepath.Join(s.dir, "index"), idx+".gitwhy-tmp"); err != nil {
-			return res, err
-		}
-		if err := os.Rename(idx+".gitwhy-tmp", idx); err != nil {
-			return res, err
-		}
-		r.Output("update-index", "-q", "--refresh") // refresh stat info; dirty entries are expected
-	} else {
-		os.Remove(idx)
-	}
-	if err := restoreMissing(r, s); err != nil {
-		return res, err
-	}
-
-	// 5. Operation state.
-	for _, f := range stateFiles {
-		if err := os.RemoveAll(filepath.Join(r.GitDir, f)); err != nil {
-			return res, err
-		}
-	}
-	for _, f := range s.State {
-		if err := copyAll(filepath.Join(s.dir, "state", f), filepath.Join(r.GitDir, f)); err != nil {
-			return res, err
-		}
 	}
 
 	// 6. Stash list.
@@ -485,6 +434,75 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	}
 	prune(r, cur.ID)
 	return res, nil
+}
+
+// restoreCheckout puts back HEAD, the working files, sparse-checkout settings, the index and the
+// state of an operation in progress from s. cur is the snapshot of the current state.
+func restoreCheckout(r *git.Repo, s, cur *Snapshot) error {
+	// 2. HEAD.
+	var err error
+	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok {
+		_, err = r.Output("symbolic-ref", "HEAD", ref)
+	} else {
+		_, err = r.Output("update-ref", "--no-deref", "HEAD", s.Head)
+	}
+	if err != nil {
+		return fmt.Errorf("restoring HEAD: %w", err)
+	}
+
+	// 3. Working files: delete files added since, rewrite files that differ.
+	if err := restoreFiles(r, s.Work, cur.Work); err != nil {
+		return err
+	}
+
+	// 4. Sparse-checkout settings, then the index.
+	for _, f := range sparseFiles {
+		os.Remove(filepath.Join(r.GitDir, f))
+	}
+	for _, f := range s.Files {
+		if err := copyFile(filepath.Join(s.dir, "sparse", f), filepath.Join(r.GitDir, f)); err != nil {
+			return err
+		}
+	}
+	for _, k := range sparseKeys {
+		if v := s.Sparse[k]; v != "" {
+			if _, err := r.Output("config", k, v); err != nil {
+				return fmt.Errorf("restoring %s: %w", k, err)
+			}
+		} else if r.OK("config", "--get", k) {
+			if _, err := r.Output("config", "--unset", k); err != nil {
+				return fmt.Errorf("restoring %s: %w", k, err)
+			}
+		}
+	}
+	idx := filepath.Join(r.GitDir, "index")
+	if s.HasIdx {
+		if err := copyFile(filepath.Join(s.dir, "index"), idx+".gitwhy-tmp"); err != nil {
+			return err
+		}
+		if err := os.Rename(idx+".gitwhy-tmp", idx); err != nil {
+			return err
+		}
+		r.Output("update-index", "-q", "--refresh") // refresh stat info; dirty entries are expected
+	} else {
+		os.Remove(idx)
+	}
+	if err := restoreMissing(r, s); err != nil {
+		return err
+	}
+
+	// 5. Operation state.
+	for _, f := range stateFiles {
+		if err := os.RemoveAll(filepath.Join(r.GitDir, f)); err != nil {
+			return err
+		}
+	}
+	for _, f := range s.State {
+		if err := copyAll(filepath.Join(s.dir, "state", f), filepath.Join(r.GitDir, f)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // updateRefs runs one all-or-nothing "git update-ref --stdin" transaction, if tx isn't empty.
