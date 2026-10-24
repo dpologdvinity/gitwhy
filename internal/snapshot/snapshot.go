@@ -124,7 +124,7 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 		}
 	}
 	w := r.With("GIT_INDEX_FILE=" + tmpIdx)
-	if _, err := w.Output("add", "-A", "--ignore-errors", "--", ":/"); err != nil {
+	if _, err := w.Output("add", "-A", "--ignore-errors"); err != nil { // no pathspec: the whole tree
 		return nil, fmt.Errorf("saving working files: %w", err)
 	}
 	if len(extra) > 0 {
@@ -624,7 +624,9 @@ func restoreMissing(r *git.Repo, s *Snapshot) error {
 		r.Output("sparse-checkout", "reapply")
 		return nil
 	}
-	out, err := r.Output("ls-files", "-z", "--deleted", "--", ":/")
+	top := r.Runner
+	top.Dir = r.Top // ls-files lists the current folder; this lists the whole tree
+	out, err := top.Output("ls-files", "-z", "--deleted")
 	if err != nil || out == "" {
 		return nil
 	}

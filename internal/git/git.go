@@ -39,8 +39,10 @@ func (e *Error) Unwrap() error { return e.Err }
 func (r Runner) cmd(args ...string) *exec.Cmd {
 	c := exec.Command("git", args...)
 	c.Dir = r.Dir
-	// Stable, parseable output regardless of the user's locale.
-	c.Env = append(append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0"), r.Env...)
+	// Stable, parseable output regardless of the user's locale. File names are literal pathspecs,
+	// so "[ab].txt" never matches a.txt; git refuses literal mixed with the other global settings.
+	c.Env = append(append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1",
+		"GIT_GLOB_PATHSPECS=0", "GIT_NOGLOB_PATHSPECS=0", "GIT_ICASE_PATHSPECS=0"), r.Env...)
 	return c
 }
 
