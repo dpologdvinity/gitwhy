@@ -12,6 +12,9 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestPreSkips checks that Pre takes no snapshot outside a repository, for a "-C" folder that does
+// not exist, for safe commands, for push (a local snapshot cannot undo it), for an empty command
+// line, or when GITWHY_HOOK_OFF=1. A needless snapshot costs time on every git command.
 func TestPreSkips(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "1\n")
@@ -36,6 +39,8 @@ func TestPreSkips(t *testing.T) {
 	}
 }
 
+// TestPreThenUndo checks the whole hook round trip: Pre snapshots before a plain "git reset
+// --hard", Post records the state after it, and restoring the snapshot brings the lost edit back.
 func TestPreThenUndo(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "1\n")
@@ -61,6 +66,9 @@ func TestPreThenUndo(t *testing.T) {
 	}
 }
 
+// TestHookScriptKeepsExitCode checks that the bash function still runs git and returns git's own
+// exit code when gitwhy is not on PATH, so the hook can never break git or scripts that check its
+// status. It also checks that shells other than bash and zsh are refused.
 func TestHookScriptKeepsExitCode(t *testing.T) {
 	gitPath, err := exec.LookPath("git")
 	if err != nil {
@@ -91,6 +99,8 @@ func TestHookScriptKeepsExitCode(t *testing.T) {
 	}
 }
 
+// TestInstallIdempotentAndUninstall checks that installing twice adds the block once, and that
+// uninstalling gives back the rc file exactly as it was, with a second uninstall changing nothing.
 func TestInstallIdempotentAndUninstall(t *testing.T) {
 	rc := filepath.Join(t.TempDir(), ".bashrc")
 	if err := os.WriteFile(rc, []byte("export A=1\n"), 0o644); err != nil {
@@ -117,6 +127,9 @@ func TestInstallIdempotentAndUninstall(t *testing.T) {
 	}
 }
 
+// TestPreSavesIgnoredFilesFromSubfolder checks that "git clean -fX" run from a subfolder saves the
+// ignored file it deletes, so undo brings it back. The preview runs in the subfolder but the
+// snapshot reads root-relative paths, so a mix-up there would lose the file.
 func TestPreSavesIgnoredFilesFromSubfolder(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", ".gitignore", "*.log\n", "sub/a.txt", "a\n")
@@ -140,6 +153,8 @@ func TestPreSavesIgnoredFilesFromSubfolder(t *testing.T) {
 	}
 }
 
+// TestPreSkipsBareRepo checks that Pre does nothing in a bare repository, which has no working
+// tree to snapshot.
 func TestPreSkipsBareRepo(t *testing.T) {
 	bare := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
@@ -150,6 +165,8 @@ func TestPreSkipsBareRepo(t *testing.T) {
 	}
 }
 
+// TestPreGivesUpQuietlyWhenSnapshotFails checks that when the snapshot cannot be taken (here a
+// leftover index.lock) Pre returns no ID instead of failing, so the user's git command still runs.
 func TestPreGivesUpQuietlyWhenSnapshotFails(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "1\n")
@@ -162,6 +179,8 @@ func TestPreGivesUpQuietlyWhenSnapshotFails(t *testing.T) {
 	}
 }
 
+// TestHookScriptWorksInZsh checks that the zsh function loads and keeps git's exit code when
+// gitwhy is not on PATH, the same promise TestHookScriptKeepsExitCode makes for bash.
 func TestHookScriptWorksInZsh(t *testing.T) {
 	zsh, err := exec.LookPath("zsh")
 	if err != nil {
@@ -184,6 +203,9 @@ func TestHookScriptWorksInZsh(t *testing.T) {
 
 	}
 }
+
+// TestUninstallDamagedBlockErrors checks that a begin marker without an end marker is an error,
+// rather than Uninstall deleting everything after the marker.
 func TestUninstallDamagedBlockErrors(t *testing.T) {
 	rc := filepath.Join(t.TempDir(), ".bashrc")
 	if err := os.WriteFile(rc, []byte("export A=1\n# >>> gitwhy hook >>>\neval x\n"), 0o644); err != nil {
@@ -194,6 +216,8 @@ func TestUninstallDamagedBlockErrors(t *testing.T) {
 	}
 }
 
+// TestUninstallEndMarkerWithoutNewline checks that a block at the very end of the file, with no
+// newline after the end marker, is still removed cleanly.
 func TestUninstallEndMarkerWithoutNewline(t *testing.T) {
 	rc := filepath.Join(t.TempDir(), ".bashrc")
 	if err := os.WriteFile(rc, []byte("export A=1\n# >>> gitwhy hook >>>\neval x\n# <<< gitwhy hook <<<"), 0o644); err != nil {
@@ -207,6 +231,8 @@ func TestUninstallEndMarkerWithoutNewline(t *testing.T) {
 	}
 }
 
+// TestRCPath checks which startup file the hook goes in: ~/.bashrc for bash, and for zsh
+// $ZDOTDIR/.zshrc when ZDOTDIR is set, else ~/.zshrc.
 func TestRCPath(t *testing.T) {
 	t.Setenv("ZDOTDIR", "")
 	if got := RCPath("zsh", "/h"); got != filepath.Join("/h", ".zshrc") {
@@ -237,6 +263,9 @@ func fakeGitwhy(t *testing.T) (pathEnv, logFile string) {
 	return bin + string(os.PathListSeparator) + filepath.Dir(gitPath), logFile
 }
 
+// TestHookScriptOnlySpawnsGitwhyForRiskyCommands checks that the bash function starts gitwhy only
+// for "reset --hard", not for --version, status, log, add or push. Starting gitwhy for every git
+// command would slow down everyday use.
 func TestHookScriptOnlySpawnsGitwhyForRiskyCommands(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake gitwhy is a sh script; Git Bash PATH handling differs. The shell logic is covered on Linux")
@@ -291,7 +320,8 @@ func runShell(t *testing.T, shell, dir, body string) (output, calls string) {
 }
 
 // TestPreSnapshotsGlobalOptionForms checks that git's global options in front of the command do
-// not hide it from the hook: -C, --no-pager, -c and --git-dir forms all take a snapshot.
+// not hide it from the hook: -C (to the root or a subfolder), --no-pager, -c and -P forms all
+// take a snapshot. (--git-dir is refused instead; see TestPreSkipsOptionsThatChangeTheRepository.)
 func TestPreSnapshotsGlobalOptionForms(t *testing.T) {
 	forms := map[string][]string{
 		"-C .":       {"-C", ".", "reset", "--hard"},

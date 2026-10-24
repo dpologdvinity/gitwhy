@@ -6,6 +6,10 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestParseGraphSkipsConnectors feeds Parse hand-written --graph output and checks that connector
+// lines become rows without a commit, that graph art keeps its shape minus trailing spaces, and
+// that each commit field lands in the right place. The TUI relies on a nil Commit to make
+// connector rows unselectable.
 func TestParseGraphSkipsConnectors(t *testing.T) {
 	out := "* \x00id1\x00a\x00s1\x00x\x00y\x00HEAD -> main\n" +
 		"|\\  \n" +
@@ -27,6 +31,9 @@ func TestParseGraphSkipsConnectors(t *testing.T) {
 	}
 }
 
+// TestLoadWithMerge runs Load on a real repo with a --no-ff merge and checks that git's actual
+// output parses into at least three commits and at least one connector line. This guards the
+// --format string in Load against drifting from what Parse expects.
 func TestLoadWithMerge(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "a.txt", "a\n")

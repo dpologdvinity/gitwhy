@@ -20,7 +20,9 @@ type FileDiff struct {
 }
 
 // Parse reads the output of `git diff -- <one path>`. Binary, mode-only
-// and empty diffs give no hunks.
+// and empty diffs give no hunks. It returns an error for any line it
+// does not expect, such as a second file's header inside a hunk or an
+// empty line in a hunk body.
 func Parse(diff string) (*FileDiff, error) {
 	fd := &FileDiff{}
 	for _, line := range strings.Split(strings.TrimRight(diff, "\n"), "\n") {
@@ -65,11 +67,15 @@ func (h Hunk) NoEOL() bool {
 	return false
 }
 
+// keepHeader lists the prefixes of the header lines Patch copies into a patch. Other header
+// lines, such as rename, copy and similarity lines, are left out.
 var keepHeader = []string{"diff --git", "index", "---", "+++", "old mode", "new mode", "new file mode", "deleted file mode"}
 
 // Patch builds a patch for hunk h alone, for `git apply --cached --recount`
 // (add -R when reverse). sel picks change lines by index into Lines; nil
 // means all. Unpicked lines become context on the side that has them.
+// The hunk header's line counts are copied unchanged, which is why
+// --recount is needed.
 func (fd *FileDiff) Patch(h int, sel []bool, reverse bool) string {
 	var b strings.Builder
 	for _, l := range fd.Header {
@@ -84,6 +90,9 @@ func (fd *FileDiff) Patch(h int, sel []bool, reverse bool) string {
 	b.WriteString(hk.Header + "\n")
 	for i, l := range hk.Lines {
 		keep := sel == nil || sel[i]
+		// The patch is applied to the index. Staging (forward), an unpicked "+" line is not in
+		// the index yet, so it is dropped, and an unpicked "-" line is still there, so it stays as
+		// context. Unstaging (reverse, applied with -R) it is the other way round.
 		switch l[0] {
 		case '+':
 			if keep {

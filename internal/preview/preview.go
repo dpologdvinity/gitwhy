@@ -1,7 +1,10 @@
 // Package preview says what a git command will do before it runs.
 //
 // Exact previews use git's own dry runs and plumbing (merge-tree, rev-list, diff) without touching
-// the repository. Other commands get no exact preview; callers fall back to recipe text.
+// the repository. Merge, rebase, cherry-pick and revert are simulated with "git merge-tree", so
+// conflicts are reported before they happen. Commands the package does not handle get an empty
+// Result; callers fall back to recipe text. A clean preview also returns the files the command
+// will delete, ignored ones included, so the caller can add them to the snapshot.
 package preview
 
 import (
@@ -13,16 +16,18 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/git"
 )
 
-// Result of previewing one command.
+// Result is the outcome of previewing one command. A Result with no Lines means "no preview".
 type Result struct {
 	Exact bool     // computed, not guessed
 	Lines []string // what will happen
-	Save  []string // ignored paths the command will delete; include them in the snapshot
+	Save  []string // paths clean will delete (ignored or untracked), relative to the repo root; include them in the snapshot
 }
 
+// add appends one formatted line to the preview.
 func (r *Result) add(format string, a ...any) { r.Lines = append(r.Lines, fmt.Sprintf(format, a...)) }
 
-// Preview computes what args (without the leading "git") will do in repo.
+// Preview computes what args (without the leading "git") will do in repo. It never changes the
+// repository. It returns a Result with no Lines when it cannot say anything useful.
 func Preview(repo *git.Repo, args []string) Result {
 	a := danger.Parse(args, danger.Subs)
 	switch a.Cmd {
@@ -37,6 +42,7 @@ func Preview(repo *git.Repo, args []string) Result {
 	case "mv":
 		return dryRun(repo, args, "-n", "Renaming ", "will move", false)
 	case "merge":
+		// Only a fresh merge of one commit can be simulated; these act on a merge in progress.
 		if a.Has("--abort", "--continue", "--quit") {
 			return Result{}
 		}
@@ -44,6 +50,8 @@ func Preview(repo *git.Repo, args []string) Result {
 			return merge(repo, p[0], mergeOptionsOf(repo, a))
 		}
 	case "rebase":
+		// --onto and --root change which commits are replayed, so the simple
+		// upstream..HEAD simulation below would be wrong for them.
 		if a.Has("--abort", "--continue", "--skip", "--quit", "--onto", "--root") {
 			return Result{}
 		}
@@ -77,6 +85,7 @@ func Preview(repo *git.Repo, args []string) Result {
 	return Result{}
 }
 
+// short returns the abbreviated commit ID of rev, or rev itself if git cannot resolve it.
 func short(repo *git.Repo, rev string) string {
 	out, err := repo.Output("rev-parse", "--short", rev)
 	if err != nil {
@@ -85,6 +94,8 @@ func short(repo *git.Repo, rev string) string {
 	return out
 }
 
+// subject returns rev as a short ID and quoted subject line, such as `abc1234 "Fix typo"`, or rev
+// itself if git cannot resolve it.
 func subject(repo *git.Repo, rev string) string {
 	out, err := repo.Output("log", "-1", "--format=%h \"%s\"", rev, "--")
 	if err != nil {
@@ -93,7 +104,9 @@ func subject(repo *git.Repo, rev string) string {
 	return out
 }
 
-// commits lists up to max one-line commits in a range, plus the total count.
+// commits lists up to 5 one-line commits ("<short id> <subject>") in a range, plus the total
+// count. rng is passed to git as is, so it may hold several revisions and options such as --not.
+// It returns nil and 0 if the range is empty or git fails.
 func commits(repo *git.Repo, rng ...string) ([]string, int) {
 	args := append([]string{"rev-list", "--count"}, rng...)
 	out, err := repo.Output(append(args, "--")...)
@@ -109,6 +122,8 @@ func commits(repo *git.Repo, rng ...string) ([]string, int) {
 	return strings.Split(list, "\n"), n
 }
 
+// listCommits adds a "title (n):" line followed by the commits in list, and a "... and N more"
+// line when n is larger than the list shown.
 func listCommits(r *Result, title string, list []string, n int) {
 	r.add("%s (%d):", title, n)
 	for _, c := range list {
@@ -119,6 +134,9 @@ func listCommits(r *Result, title string, list []string, n int) {
 	}
 }
 
+// changedFiles returns the paths "git diff --name-only <args>" prints: with one commit, tracked
+// files whose working-tree version differs from it; with two, files that differ between them.
+// Untracked files are not included. It returns nil on error.
 func changedFiles(repo *git.Repo, args ...string) []string {
 	out, err := repo.Output(append([]string{"diff", "--name-only"}, args...)...)
 	if err != nil || out == "" {
@@ -127,6 +145,8 @@ func changedFiles(repo *git.Repo, args ...string) []string {
 	return strings.Split(out, "\n")
 }
 
+// listFiles adds a "title (n):" line followed by at most 8 files. It adds nothing when files is
+// empty.
 func listFiles(r *Result, title string, files []string) {
 	if len(files) == 0 {
 		return
@@ -141,11 +161,14 @@ func listFiles(r *Result, title string, files []string) {
 	}
 }
 
+// reset previews "git reset". With paths (or --patch) it only unstages. Otherwise it reports where
+// the branch moves, the commits it leaves and gains, and what happens to files for each mode.
 func reset(repo *git.Repo, a danger.Args) Result {
 	r := Result{Exact: true}
 	pos := a.Positional()
 	paths := a.AfterDash()
 	target := "HEAD"
+	// The first positional is the commit; any more are paths given without "--".
 	if len(pos) > 0 {
 		target = pos[0]
 		paths = append(paths, pos[1:]...)
@@ -154,6 +177,7 @@ func reset(repo *git.Repo, a danger.Args) Result {
 		r.add("Unstages changes in the given files (sets their staged version to %s). Your files on disk don't change.", target)
 		return r
 	}
+	// Not a commit (for example a path given without "--"): no exact preview.
 	if _, err := repo.Output("rev-parse", "--verify", "-q", target+"^{commit}"); err != nil {
 		return Result{}
 	}
@@ -173,6 +197,7 @@ func reset(repo *git.Repo, a danger.Args) Result {
 	case a.Has("--soft"):
 		listFiles(&r, "Their changes stay staged", moved)
 	case a.Has("--hard"):
+		// --hard drops uncommitted changes to tracked files; untracked files are left alone.
 		listFiles(&r, "Files with uncommitted changes that will be RESET", changedFiles(repo, "HEAD"))
 		listFiles(&r, "Files that change to match "+target, moved)
 	case a.Has("--keep"):
@@ -190,6 +215,8 @@ func reset(repo *git.Repo, a danger.Args) Result {
 // passed through untouched (git lets -n win over -f, and a second -f changes what clean deletes).
 // Only lines that start with prefix are file lines; git's progress lines are skipped.
 func dryRun(repo *git.Repo, args []string, flag, prefix, verb string, isClean bool) Result {
+	// core.quotePath=false keeps non-ASCII names readable; names with a double quote or newline
+	// are still quoted, which unquote undoes for clean.
 	dry := append([]string{"-c", "core.quotePath=false", args[0], flag}, args[1:]...)
 	out, err := repo.Output(dry...)
 	if err != nil {
@@ -205,6 +232,7 @@ func dryRun(repo *git.Repo, args []string, flag, prefix, verb string, isClean bo
 		if isClean {
 			f = unquote(f)
 		} else {
+			// rm and add print "rm 'path'" and "add 'path'"; drop the closing quote.
 			f = strings.TrimSuffix(f, "'")
 		}
 		files = append(files, f)
@@ -214,6 +242,8 @@ func dryRun(repo *git.Repo, args []string, flag, prefix, verb string, isClean bo
 		return r
 	}
 	listFiles(&r, "Files git "+verb, files)
+	// Only clean can delete ignored files, which a snapshot does not hold unless told to. Every
+	// path it lists is handed over; the untracked ones are in the snapshot anyway.
 	if isClean {
 		r.Save = fromRepoRoot(repo, files)
 	}
@@ -245,9 +275,14 @@ func fromRepoRoot(repo *git.Repo, files []string) []string {
 	return out
 }
 
+// mergeTree runs "git merge-tree --write-tree" with args and returns the resulting tree ID and
+// the conflicting paths. It writes only objects, never refs, the index or files. A path can be
+// listed more than once and the list can hold empty lines, so callers pass conflicts through unique.
 func mergeTree(repo *git.Repo, args ...string) (tree string, conflicts []string, err error) {
 	out, err := repo.Output(append([]string{"merge-tree", "--write-tree", "--name-only", "--no-messages"}, args...)...)
 	lines := strings.Split(out, "\n")
+	// merge-tree exits 1 when the merge has conflicts; its output is still the tree ID followed by
+	// the conflicting paths. Any other failure is a real error.
 	if err != nil {
 		if git.ExitCode(err) != 1 || len(lines) == 0 {
 			return "", nil, err
@@ -280,6 +315,8 @@ func mergeOptionsOf(repo *git.Repo, a danger.Args) mergeOptions {
 	return o
 }
 
+// merge previews "git merge <from>": already up to date, a fast-forward, a refused --ff-only, or
+// a real merge simulated with merge-tree to find conflicts.
 func merge(repo *git.Repo, from string, o mergeOptions) Result {
 	if !repo.OK("rev-parse", "--verify", "-q", from+"^{commit}") {
 		return Result{}
@@ -291,6 +328,8 @@ func merge(repo *git.Repo, from string, o mergeOptions) Result {
 	}
 	list, n := commits(repo, "HEAD.."+from)
 	canFastForward := repo.OK("merge-base", "--is-ancestor", "HEAD", from)
+	// --squash never fast-forwards and --no-ff always makes a merge commit, so both fall through
+	// to the merge-tree simulation.
 	if canFastForward && !o.squash && !o.noFF {
 		r.add("Fast-forward: your branch just moves ahead to %s. No merge commit.", short(repo, from))
 		listCommits(&r, "Commits coming in", list, n)
@@ -319,13 +358,18 @@ func merge(repo *git.Repo, from string, o mergeOptions) Result {
 }
 
 // simulate replays commits (oldest first) onto base with merge-tree, without touching the repo.
-// It returns the commit that would conflict and the conflicting files, if any.
+// When revert is set, each commit is undone instead of applied. It returns the first commit that
+// would conflict and its conflicting files, or "" when none would. A root commit (no parent) is
+// an error, since there is no parent to diff it against. Each replayed step is written as a
+// dangling commit with commit-tree so the next step can build on it; no ref points at it.
 func simulate(repo *git.Repo, base string, list []string, revert bool) (string, []string, error) {
 	cur := base
 	for _, c := range list {
 		var tree string
 		var conflicts []string
 		var err error
+		// A cherry-pick is a three-way merge of c into cur with c's parent as the base; a revert
+		// swaps the sides, using c as the base and its parent as the side merged in.
 		if revert {
 			tree, conflicts, err = mergeTree(repo, "--merge-base", c, cur, c+"^")
 		} else if repo.OK("rev-parse", "--verify", "-q", c+"^") {
@@ -350,6 +394,8 @@ func simulate(repo *git.Repo, base string, list []string, revert bool) (string, 
 // identity lets commit-tree work for previews even with no user.name configured.
 var identity = []string{"GIT_AUTHOR_NAME=gitwhy", "GIT_AUTHOR_EMAIL=gitwhy@localhost", "GIT_COMMITTER_NAME=gitwhy", "GIT_COMMITTER_EMAIL=gitwhy@localhost"}
 
+// revList returns the full IDs of the non-merge commits in a range, oldest first, which is the
+// order rebase and cherry-pick apply them in. It returns nil if the range is empty or git fails.
 func revList(repo *git.Repo, rng ...string) []string {
 	out, err := repo.Output(append([]string{"rev-list", "--reverse", "--no-merges"}, append(rng, "--")...)...)
 	if err != nil || out == "" {
@@ -358,6 +404,8 @@ func revList(repo *git.Repo, rng ...string) []string {
 	return strings.Split(out, "\n")
 }
 
+// reportSim adds the result of simulate to r: no conflicts when at is empty, otherwise the
+// commit where git would stop and its conflicting files.
 func reportSim(r *Result, repo *git.Repo, at string, files []string) {
 	if at == "" {
 		r.add("No conflicts expected.")
@@ -368,6 +416,8 @@ func reportSim(r *Result, repo *git.Repo, at string, files []string) {
 	r.add("git will stop there for you to fix it (gitwhy resolve), or you can abort.")
 }
 
+// rebase previews "git rebase <upstream>": the commits replayed and, unless the rebase is
+// interactive, whether replaying them onto upstream would conflict.
 func rebase(repo *git.Repo, upstream string, interactive bool) Result {
 	if !repo.OK("rev-parse", "--verify", "-q", upstream+"^{commit}") {
 		return Result{}
@@ -392,6 +442,8 @@ func rebase(repo *git.Repo, upstream string, interactive bool) Result {
 	return r
 }
 
+// cherryPick previews "git cherry-pick <revs>". Each rev may be one commit or an "a..b" range. It
+// lists the commits copied and simulates applying them onto HEAD.
 func cherryPick(repo *git.Repo, revs []string) Result {
 	var list []string
 	for _, rev := range revs {
@@ -424,8 +476,11 @@ func cherryPick(repo *git.Repo, revs []string) Result {
 	return r
 }
 
+// revert previews "git revert <rev>" for one commit and simulates whether undoing it on top of
+// HEAD would conflict.
 func revert(repo *git.Repo, rev string) Result {
 	id, err := repo.Output("rev-parse", "--verify", "-q", rev+"^{commit}")
+	// A root commit has no parent to revert to, so it gets no preview.
 	if err != nil || !repo.OK("rev-parse", "--verify", "-q", id+"^") {
 		return Result{}
 	}
@@ -439,6 +494,8 @@ func revert(repo *git.Repo, rev string) Result {
 	return r
 }
 
+// branch previews deleting branches (-d, -D, --delete) and force-moving one (-f, --force). For a
+// delete it lists the commits that no other branch, remote branch or tag still reaches.
 func branch(repo *git.Repo, a danger.Args) Result {
 	pos := a.Positional()
 	r := Result{Exact: true}
@@ -446,6 +503,7 @@ func branch(repo *git.Repo, a danger.Args) Result {
 	case a.Has("-d", "-D", "--delete") && len(pos) > 0:
 		for _, b := range pos {
 			ref := "refs/heads/" + b
+			// Names that are not local branches are skipped.
 			if !repo.OK("show-ref", "--verify", "-q", ref) {
 				continue
 			}
@@ -459,6 +517,7 @@ func branch(repo *git.Repo, a danger.Args) Result {
 		}
 		return r
 	case a.Has("-f", "--force") && len(pos) >= 1:
+		// "branch -f <name> [<start>]": the start point defaults to HEAD.
 		target := "HEAD"
 		if len(pos) > 1 {
 			target = pos[1]
@@ -477,6 +536,7 @@ func branch(repo *git.Repo, a danger.Args) Result {
 	return Result{}
 }
 
+// stash previews "git stash" clear, drop, pop and push (also plain "git stash").
 func stash(repo *git.Repo, a danger.Args) Result {
 	r := Result{Exact: true}
 	switch a.Sub {
@@ -493,6 +553,7 @@ func stash(repo *git.Repo, a danger.Args) Result {
 		if p := a.Positional(); len(p) > 0 {
 			which = p[0]
 		}
+		// The stash's reflog subject is its message, such as "WIP on main: abc1234 Fix typo".
 		out, err := repo.Output("log", "-1", "-g", "--format=%gs", which)
 		if err != nil {
 			return Result{}
@@ -522,8 +583,12 @@ func stash(repo *git.Repo, a danger.Args) Result {
 	return Result{}
 }
 
+// switchBranch previews "git switch" and "git checkout". "checkout -- <files>" overwrites those
+// files; otherwise it previews moving to one existing commit or branch. Creating a branch (-c, -b,
+// --orphan and friends) gets no preview.
 func switchBranch(repo *git.Repo, a danger.Args) Result {
 	pos := a.Positional()
+	// An empty "--" is not a file list, so "checkout <branch> --" is still a branch switch.
 	if a.Cmd == "checkout" && len(a.AfterDash()) > 0 {
 		r := Result{Exact: true}
 		listFiles(&r, "Files overwritten", a.AfterDash())
@@ -534,6 +599,8 @@ func switchBranch(repo *git.Repo, a danger.Args) Result {
 	}
 	target := pos[0]
 	if !repo.OK("rev-parse", "--verify", "-q", target+"^{commit}") {
+		// No local branch by that name: git creates one from a remote branch of the same name.
+		// Only origin is checked here.
 		if repo.OK("show-ref", "--verify", "-q", "refs/remotes/origin/"+target) {
 			r := Result{Exact: true}
 			r.add("Creates local branch %s tracking origin/%s, and switches to it.", target, target)
@@ -554,18 +621,21 @@ func switchBranch(repo *git.Repo, a danger.Args) Result {
 	return r
 }
 
+// push previews "git push <remote> <refspec>" for a single refspec. It compares against the
+// remote-tracking branch, so it is only as current as the last fetch and is never marked Exact.
 func push(repo *git.Repo, a danger.Args) Result {
 	pos := a.Positional()
 	if len(pos) != 2 || a.Has("--delete", "-d", "--mirror", "--all", "--tags") {
 		return Result{}
 	}
+	// A refspec is "[+]<src>[:<dst>]"; a leading "+" forces this one ref.
 	remote, src := pos[0], strings.TrimPrefix(pos[1], "+")
 	src, dst, ok := strings.Cut(src, ":")
 	if !ok {
 		dst = src
 	}
 	rref := "refs/remotes/" + remote + "/" + dst
-	r := Result{}
+	r := Result{} // not Exact: the remote may have moved since the last fetch
 	if !repo.OK("show-ref", "--verify", "-q", rref) {
 		r.add("Creates %s on %s.", dst, remote)
 		return r
@@ -586,6 +656,7 @@ func push(repo *git.Repo, a danger.Args) Result {
 	return r
 }
 
+// unique returns xs without empty strings and duplicates, keeping the first-seen order.
 func unique(xs []string) []string {
 	seen := map[string]bool{}
 	var out []string

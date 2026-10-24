@@ -7,6 +7,10 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestWarnings checks how many warnings each common command line gets: risky forms warn, their
+// safe twins (dry runs, --soft, --cached, --staged, plain push) stay silent, and abbreviated long
+// flags ("--ha", "--forc") count as the full flag. Too many warnings teach users to ignore them;
+// too few let work be lost.
 func TestWarnings(t *testing.T) {
 	cases := map[string]int{
 		"reset --hard HEAD~1":          1,
@@ -47,6 +51,8 @@ func TestWarnings(t *testing.T) {
 	}
 }
 
+// TestCommandsListsRuleCommands checks that Commands includes commands from the rules table. The
+// shell hook skips built-in commands missing from this list, so they would never get a snapshot.
 func TestCommandsListsRuleCommands(t *testing.T) {
 	got := Commands()
 	has := map[string]bool{}

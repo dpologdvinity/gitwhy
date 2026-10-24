@@ -9,8 +9,13 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// text joins a preview's lines so tests can search the whole preview with strings.Contains.
 func text(r Result) string { return strings.Join(r.Lines, "\n") }
 
+// diverged builds a repo where main and feature each have one commit on top of a shared base, and
+// main is checked out. With conflict set, both commits change f.txt, so merging, rebasing or
+// cherry-picking one onto the other conflicts; otherwise main changes g.txt and they apply
+// cleanly.
 func diverged(t *testing.T, conflict bool) *testrepo.Repo {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "base\n", "g.txt", "g\n")
@@ -25,6 +30,9 @@ func diverged(t *testing.T, conflict bool) *testrepo.Repo {
 	return r
 }
 
+// TestResetPreview checks that a `reset --hard HEAD~1` preview lists the commit that leaves the
+// branch and the dirty file that will be reset, and that previewing leaves HEAD and the file
+// untouched. A preview that changed the repo would break the "previews are read-only" rule.
 func TestResetPreview(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -40,6 +48,8 @@ func TestResetPreview(t *testing.T) {
 	}
 }
 
+// TestCleanPreviewSavesFiles checks that a `clean -fdx` preview returns both the ignored and the
+// untracked file in Save, so undo can bring the ignored one back, and that it deletes nothing.
 func TestCleanPreviewSavesFiles(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", ".gitignore", "*.log\n")
@@ -54,6 +64,8 @@ func TestCleanPreviewSavesFiles(t *testing.T) {
 	}
 }
 
+// TestMergePredictsConflicts checks that the merge-tree simulation names the conflicting file
+// when both sides changed it, and reports no conflicts when they changed different files.
 func TestMergePredictsConflicts(t *testing.T) {
 	r := diverged(t, true)
 	if s := text(Preview(r.Repo, []string{"merge", "feature"})); !strings.Contains(s, "CONFLICTS expected in (1)") || !strings.Contains(s, "f.txt") {
@@ -65,6 +77,8 @@ func TestMergePredictsConflicts(t *testing.T) {
 	}
 }
 
+// TestRebaseAndCherryPickPredictConflicts checks the commit-by-commit simulation used by rebase
+// and cherry-pick: it finds the conflicting commit when there is one and reports none otherwise.
 func TestRebaseAndCherryPickPredictConflicts(t *testing.T) {
 	r := diverged(t, true)
 	r.Git("switch", "-q", "feature")
@@ -81,6 +95,8 @@ func TestRebaseAndCherryPickPredictConflicts(t *testing.T) {
 	}
 }
 
+// TestBranchDeleteShowsOrphanedCommits checks that deleting an unmerged branch lists the commit
+// that no other branch reaches, which is the work the user is about to lose track of.
 func TestBranchDeleteShowsOrphanedCommits(t *testing.T) {
 	r := diverged(t, false)
 	s := text(Preview(r.Repo, []string{"branch", "-D", "feature"}))
