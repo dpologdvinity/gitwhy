@@ -637,6 +637,44 @@ func TestFileErrorStillRestoresOtherFiles(t *testing.T) {
 	}
 }
 
+// TestIgnoredFilesInReplacedFolderAreSaved proves that ignored files undo deletes, inside a
+// folder or as a file where a folder must go, are saved first, so undo of the undo brings them
+// back.
+func TestIgnoredFilesInReplacedFolderAreSaved(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", ".gitignore", "*.env\n")
+	r.Write("config", "plain file\n")
+	r.Write("dir/f", "f\n")
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(r.Top, "config"))
+	r.Write("config/local.env", "SECRET\n")
+	os.RemoveAll(filepath.Join(r.Top, "dir"))
+	r.Write("dir.env", "x\n")
+	if err := os.Rename(filepath.Join(r.Top, "dir.env"), filepath.Join(r.Top, "dir")); err != nil {
+		t.Fatal(err)
+	}
+	r.Write(".git/info/exclude", "/dir\n") // dir is now an ignored file where a folder must go
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Read("config") != "plain file\n" || r.Read("dir/f") != "f\n" {
+		t.Fatalf("config = %q, dir/f = %q", r.Read("config"), r.Read("dir/f"))
+	}
+	if _, err := Restore(r.Repo, res.Before); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Read("config/local.env"); got != "SECRET\n" {
+		t.Errorf("config/local.env = %q", got)
+	}
+	if got := r.Read("dir"); got != "x\n" {
+		t.Errorf("dir = %q", got)
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -654,18 +655,46 @@ func hasRepo(full string) bool {
 	return found
 }
 
-// overwrittenUnsaved lists files restore will write over that exist on disk but aren't in the
-// current snapshot (because they're ignored now).
+// overwrittenUnsaved lists files restore will write over or delete that exist on disk but aren't
+// in the current snapshot (because they're ignored now): a file at a path the snapshot needs,
+// ignored files inside a folder at such a path, and a file where one of its folders must go.
 func overwrittenUnsaved(r *git.Repo, want, have string) []string {
 	cs, err := diffRaw(r, want, have)
 	if err != nil {
 		return nil
 	}
-	var out []string
+	var out, dirs []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
 	for _, c := range cs {
-		if c.status == 'D' && !isGitlink(c) {
-			if fi, err := os.Lstat(filepath.Join(r.Top, filepath.FromSlash(c.path))); err == nil && !fi.IsDir() {
-				out = append(out, c.path)
+		if c.status != 'D' || isGitlink(c) {
+			continue
+		}
+		if fi, err := os.Lstat(filepath.Join(r.Top, filepath.FromSlash(c.path))); err == nil {
+			if fi.IsDir() {
+				dirs = append(dirs, c.path)
+			} else {
+				add(c.path)
+			}
+		}
+		for d := path.Dir(c.path); d != "."; d = path.Dir(d) {
+			if fi, err := os.Lstat(filepath.Join(r.Top, filepath.FromSlash(d))); err == nil && !fi.IsDir() {
+				add(d)
+			}
+		}
+	}
+	if len(dirs) > 0 {
+		top := r.Runner
+		top.Dir = r.Top // ls-files prints paths relative to the current folder
+		list, _ := top.Output(append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--"}, dirs...)...)
+		for _, p := range strings.Split(list, "\x00") {
+			if p != "" {
+				add(p)
 			}
 		}
 	}
