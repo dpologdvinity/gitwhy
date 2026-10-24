@@ -283,22 +283,24 @@ func read(dir string) (*Snapshot, error) {
 
 // Delete removes a snapshot and the refs that keep its objects alive.
 func Delete(r *git.Repo, s *Snapshot) {
-	deleteRefs(r, s.ID)
+	// Best effort: refs left behind lose their folder here, so the next prune deletes them.
+	_ = deleteRefs(r, s.ID)
 	os.RemoveAll(s.dir)
 }
 
 // deleteRefs removes refs/gitwhy/snapshots/<id> and the extra refs Take made for that ID.
-func deleteRefs(r *git.Repo, id string) {
-	out, _ := r.Output("for-each-ref", "--format=%(refname)", refPrefix)
+func deleteRefs(r *git.Repo, id string) error {
+	out, err := r.Output("for-each-ref", "--format=%(refname)", refPrefix)
+	if err != nil {
+		return err
+	}
 	var tx strings.Builder
 	for _, name := range strings.Split(out, "\n") {
 		if name == refPrefix+id || strings.HasPrefix(name, refPrefix+id+"-") {
 			fmt.Fprintf(&tx, "delete %s\n", name)
 		}
 	}
-	if tx.Len() > 0 {
-		r.OutputIn(strings.NewReader(tx.String()), "update-ref", "--stdin")
-	}
+	return updateRefs(r, tx.String())
 }
 
 func prune(r *git.Repo, keep string) {
@@ -368,7 +370,7 @@ func pruneOrphans(r *git.Repo) {
 			fmt.Fprintf(&tx, "delete %s\n", name)
 		}
 	}
-	updateRefs(r, tx.String())
+	_ = updateRefs(r, tx.String()) // best effort: the next prune tries again
 }
 
 // Result of a restore.
