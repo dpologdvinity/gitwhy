@@ -37,11 +37,17 @@ func (a *App) plan(j job) ([]planned, []string, error) {
 	if j.literal != nil {
 		return []planned{{args: j.literal}}, nil, nil
 	}
+	return planSteps(j.steps, j.ans)
+}
+
+// planSteps resolves recipe steps with the answers so far: questions asked later show as
+// <name>, "when" is honored, a true "fail" stops with stopError and "warn" adds a warning.
+func planSteps(steps []recipe.Step, ans recipe.Answers) ([]planned, []string, error) {
 	shown := recipe.Answers{}
-	for k, v := range j.ans {
+	for k, v := range ans {
 		shown[k] = v
 	}
-	for _, s := range j.steps {
+	for _, s := range steps {
 		if s.Ask != "" {
 			if _, ok := shown[s.Ask]; !ok {
 				shown[s.Ask] = "<" + s.Ask + ">"
@@ -50,7 +56,7 @@ func (a *App) plan(j job) ([]planned, []string, error) {
 	}
 	var out []planned
 	var warns []string
-	for _, s := range j.steps {
+	for _, s := range steps {
 		if s.Ask != "" {
 			continue
 		}
@@ -83,8 +89,11 @@ func (a *App) plan(j job) ([]planned, []string, error) {
 // root-relative), literal commands in the folder the user ran gitwhy from.
 func (a *App) runner(j job) *git.Repo {
 	r := *a.Repo
-	if j.literal != nil && a.Cwd != "" {
-		r.Dir = a.Cwd
+	if j.literal != nil {
+		if a.Cwd != "" {
+			r.Dir = a.Cwd
+		}
+		r.Runner = typed(r.Runner)
 	}
 	return &r
 }
@@ -192,13 +201,18 @@ func (a *App) execute(j job) error {
 	}()
 
 	if j.literal != nil {
-		return a.runOne(where, recipe.Step{}, j.literal, j.ans)
+		if err := a.runOne(where, recipe.Step{}, j.literal, j.ans); err != nil {
+			return a.failed(err, nil)
+		}
+		a.done()
+		return nil
 	}
-	for _, s := range j.steps {
+	for i, s := range j.steps {
 		if s.Ask != "" {
 			q := j.r.Question(s.Ask)
 			if err := a.ask(q, j.ans); err != nil {
-				return a.failed(err)
+				delete(j.ans, s.Ask) // not answered: show it as <name>
+				return a.failed(err, notRun(j.steps[i:], j.ans))
 			}
 			continue
 		}
@@ -217,11 +231,22 @@ func (a *App) execute(j job) error {
 			continue
 		}
 		if err := a.runOne(where, s, args, j.ans); err != nil {
-			return err
+			return a.failed(err, notRun(j.steps[i+1:], j.ans))
 		}
 	}
 	a.done()
 	return nil
+}
+
+// notRun lists the commands of the steps that would still have run, for the advice after a
+// recipe stops part way. Answers not given yet show as <name>.
+func notRun(steps []recipe.Step, ans recipe.Answers) [][]string {
+	ps, _, _ := planSteps(steps, ans)
+	var out [][]string
+	for _, p := range ps {
+		out = append(out, p.args)
+	}
+	return out
 }
 
 func (a *App) runOne(where *git.Repo, s recipe.Step, args []string, ans recipe.Answers) error {
@@ -229,18 +254,12 @@ func (a *App) runOne(where *git.Repo, s recipe.Step, args []string, ans recipe.A
 	if len(s.Todo) > 0 {
 		e, err := a.todoEnv(s, ans)
 		if err != nil {
-			return a.failed(err)
+			return err
 		}
 		env = append(env, e)
 	}
 	say("%s", dimStyle.Render("$ git "+shellJoin(args)))
-	if err := where.With(env...).Interactive(args...); err != nil {
-		return a.failed(err)
-	}
-	if s.Git == nil { // literal command
-		a.done()
-	}
-	return nil
+	return where.With(env...).Interactive(args...)
 }
 
 func (a *App) todoEnv(s recipe.Step, ans recipe.Answers) (string, error) {
@@ -275,18 +294,37 @@ func (a *App) done() {
 	say("%s Undo with: %s", okStyle.Render("✓ Done."), cmdStyle.Render("gitwhy undo"))
 }
 
-func (a *App) failed(err error) error {
+// failed explains a step that stopped and what to do next. left lists the commands of the
+// steps that did not run: when some are left, "gitwhy continue" would finish only git's part,
+// so the advice is to go back with "gitwhy undo" instead.
+func (a *App) failed(err error, left [][]string) error {
 	say("")
 	say("%s", badStyle.Render("✗ It stopped: "+firstLine(err.Error())))
-	if op := recipe.InProgress(a.Repo); op != "" {
-		if recipe.Test(a.Repo, "has-conflicts") {
-			say("There are conflicts. Fix them with %s, then %s.", cmdStyle.Render("gitwhy resolve"), cmdStyle.Render("gitwhy continue"))
-		} else {
-			say("A %s is in progress. Continue with %s.", op, cmdStyle.Render("gitwhy continue"))
+	op := recipe.InProgress(a.Repo)
+	conflicts := recipe.Test(a.Repo, "has-conflicts")
+	undo, resolve := cmdStyle.Render("gitwhy undo"), cmdStyle.Render("gitwhy resolve")
+	switch {
+	case op == "bisect": // "git bisect" has no --continue; HEAD stays on a commit under test
+		say("A bisect is still running, so you are not back on your branch. End it with %s.", cmdStyle.Render("gitwhy abort"))
+	case len(left) > 0:
+		if conflicts {
+			say("There are conflicts (%s can fix them).", resolve)
 		}
-		say("Or cancel it with %s, or go back to before you started with %s.", cmdStyle.Render("gitwhy abort"), cmdStyle.Render("gitwhy undo"))
-	} else {
-		say("Nothing is lost: %s puts everything back to before this started.", cmdStyle.Render("gitwhy undo"))
+		say("These steps did not run:")
+		for _, args := range left {
+			say("  %s", cmdStyle.Render("git "+shellJoin(args)))
+		}
+		say("Go back to before this started with %s, then try again.", undo)
+	case conflicts && op != "":
+		say("There are conflicts. Fix them with %s, then %s.", resolve, cmdStyle.Render("gitwhy continue"))
+		say("Or cancel it with %s, or go back to before you started with %s.", cmdStyle.Render("gitwhy abort"), undo)
+	case conflicts:
+		say("There are conflicts. Fix them with %s, then commit. Or go back to before this started with %s.", resolve, undo)
+	case op != "":
+		say("A %s is in progress. Continue with %s.", op, cmdStyle.Render("gitwhy continue"))
+		say("Or cancel it with %s, or go back to before you started with %s.", cmdStyle.Render("gitwhy abort"), undo)
+	default:
+		say("Nothing is lost: %s puts everything back to before this started.", undo)
 	}
 	return ErrCancelled
 }

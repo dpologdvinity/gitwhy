@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -89,6 +90,50 @@ func TestFileNamesKeepSpaces(t *testing.T) {
 	out := r.do("discard-file-changes", text("2"), text("0"), yes)
 	expect(t, "keep (not picked)", r.read("keep"), "a edited\n", out)
 	expect(t, "keep+space (picked)", r.read("keep "), "b\n", out)
+}
+
+// TestCommitRename proves that committing a renamed file (git mv) through the file picker commits
+// the whole rename. Only the new path used to be passed, so the commit added a copy and left the
+// deletion of the old path staged.
+func TestCommitRename(t *testing.T) {
+	for _, c := range []struct {
+		recipe, rev string // rev is the commit that must hold the rename
+		answers     []answer
+	}{
+		{"commit-changes", "HEAD", []answer{pick("new.txt"), text("0"), text("rename"), yes}},
+		{"amend-last-commit", "HEAD", []answer{pick("new.txt"), text("0"), yes}},
+		{"fix-past-commit", "HEAD~2", []answer{pick("new.txt"), text("0"), commit("c2"), yes}},
+	} {
+		t.Run(c.recipe, func(t *testing.T) {
+			r := newRepo(t)
+			r.git("mv", "f1.txt", "new.txt")
+			out := r.do(c.recipe, c.answers...)
+			expect(t, "status", r.git("status", "--porcelain"), "", out)
+			expect(t, "in "+c.rev, r.git("show", "--name-status", "-M", "--format=", c.rev, "--", "f1.txt", "new.txt"),
+				"R100\tf1.txt\tnew.txt", out)
+		})
+	}
+}
+
+// TestRemoteBranchPick proves that picking a remote branch (origin/feat) that has no local
+// branch makes a local branch feat that tracks it. "git switch origin/feat" used to fail, and
+// "git worktree add <dir> origin/feat" made a detached HEAD instead of the branch.
+func TestRemoteBranchPick(t *testing.T) {
+	up, c := withRemote(t)
+	up.git("push", "-q", "origin", "HEAD~1:refs/heads/feat")
+	c.git("fetch", "-q")
+
+	out := c.do("switch-branch", pick("origin/feat"), yes)
+	expect(t, "branch", c.git("branch", "--show-current"), "feat", out)
+	expect(t, "upstream", c.git("rev-parse", "--abbrev-ref", "feat@{upstream}"), "origin/feat", out)
+
+	c.git("switch", "-q", "main")
+	c.git("branch", "-q", "-D", "feat")
+	dir := filepath.Join(t.TempDir(), "wt")
+	out = c.do("worktree-add", pick("origin/feat"), text(dir), yes)
+	wt := &repo{t: t, dir: dir}
+	expect(t, "worktree branch", wt.git("branch", "--show-current"), "feat", out)
+	expect(t, "worktree upstream", wt.git("rev-parse", "--abbrev-ref", "feat@{upstream}"), "origin/feat", out)
 }
 
 // TestTypedPathWithSpaces proves that when there are too many files to list (over 2000) and the

@@ -284,11 +284,9 @@ func (a *App) Run(args []string) error {
 		r := a.Repo
 		if r == nil {
 			wd, _ := os.Getwd()
-			return gitIn(wd, args)
+			return passthrough(gitIn(wd, args))
 		}
-		r2 := *r
-		r2.Dir = a.Cwd
-		return r2.Interactive(args...)
+		return passthrough(typed(git.Runner{Dir: a.Cwd, Env: r.Env}).Interactive(args...))
 	}
 	return a.execute(job{title: "git " + shellJoin(args), literal: args})
 }
@@ -458,4 +456,8 @@ func contains(xs []string, x string) bool {
 
 func dangerOf(args []string) []string { return danger.Warnings(args) }
 
-func gitIn(dir string, args []string) error { return git.Runner{Dir: dir}.Interactive(args...) }
+func gitIn(dir string, args []string) error { return typed(git.Runner{Dir: dir}).Interactive(args...) }
+
+// typed returns r for a git command the user typed: file patterns keep git's normal globbing,
+// even though gitwhy's own git calls treat paths literally (GIT_LITERAL_PATHSPECS=1).
+func typed(r git.Runner) git.Runner { return r.With("GIT_LITERAL_PATHSPECS=0") }

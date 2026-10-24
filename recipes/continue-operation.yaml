@@ -6,6 +6,8 @@ checks:
   - {if: has-conflicts, block: "Some files still have conflicts.", suggest: resolve-conflicts}
 questions: []
 steps:
+  - when: '{{eq .op "bisect"}}'
+    fail: "A bisect can't be continued. End it with gitwhy abort."
   - git: ["{{.op}}", --continue]
     env: [GIT_EDITOR=true]
 predict: The {{.op}} continues with your resolved files.
