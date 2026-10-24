@@ -4,6 +4,8 @@ package danger
 import (
 	"sort"
 	"strings"
+
+	"github.com/dpologdvinity/gitwhy/internal/git"
 )
 
 // Args is a parsed command line (without the leading "git").
@@ -13,11 +15,27 @@ type Args struct {
 	Words []string // everything after Cmd
 	short map[byte]bool
 	long  map[string]bool
-	dash  bool // "--" present
+}
+
+// valueShort lists, per command, the short flags that take a value. In "-ekeep.env" the letters
+// after "e" are its value, not more flags, so Parse stops reading letters there. Without this,
+// the "n" in "keep.env" would look like -n (dry run) and "-bfix" would look like -f (force).
+var valueShort = map[string]string{
+	"checkout": "bB",
+	"switch":   "cC",
+	"clean":    "e",
+	"commit":   "mFCcStu",
+	"tag":      "mFu",
+	"push":     "o",
+	"rebase":   "xsXSC",
+	"merge":    "msXFS",
+	"stash":    "m",
+	"restore":  "s",
+	"branch":   "u",
 }
 
 // Parse splits args into command, optional subcommand and flags. Combined short flags ("-fdx")
-// count as each letter.
+// count as each letter, up to a flag that takes a value (see valueShort).
 func Parse(args []string, subs map[string]bool) Args {
 	a := Args{short: map[byte]bool{}, long: map[string]bool{}}
 	if len(args) == 0 {
@@ -26,7 +44,6 @@ func Parse(args []string, subs map[string]bool) Args {
 	a.Cmd, a.Words = args[0], args[1:]
 	for i, w := range a.Words {
 		if w == "--" {
-			a.dash = true
 			break
 		}
 		switch {
@@ -36,6 +53,9 @@ func Parse(args []string, subs map[string]bool) Args {
 		case strings.HasPrefix(w, "-") && len(w) > 1:
 			for j := 1; j < len(w); j++ {
 				a.short[w[j]] = true
+				if strings.IndexByte(valueShort[a.Cmd], w[j]) >= 0 {
+					break // the rest of the word is this flag's value
+				}
 			}
 		case i == 0 && subs[w]:
 			a.Sub = w
@@ -112,14 +132,18 @@ func always(Args) bool { return true }
 
 const unrecoverable = " gitwhy can't undo this."
 
+// overwritesFiles is the warning for commands that replace files with another version.
+const overwritesFiles = "Overwrites changes in those files."
+
 var rules = []rule{
 	{"reset", has("--hard"), "Deletes every uncommitted change to tracked files."},
 	{"reset", has("--merge"), "Staged changes are lost."},
 	{"checkout", has("-f", "--force"), "Discards local changes."},
 	{"checkout", func(a Args) bool {
-		// "checkout -- f", "checkout .", "checkout <rev> <path>": overwrite files.
-		return a.dash || a.Has("--ours", "--theirs") || contains(a.Positional(), ".") || (len(a.Positional()) >= 2 && !a.Has("-b", "-B", "--orphan"))
-	}, "Overwrites changes in those files."},
+		// "checkout -- f", "checkout .", "checkout <rev> <path>": overwrite files. A lone path
+		// ("checkout f") needs the repository to tell it from a branch: see WarningsIn.
+		return len(a.AfterDash()) > 0 || a.Has("--ours", "--theirs") || contains(a.Positional(), ".") || (len(a.Positional()) >= 2 && !a.Has("-b", "-B", "--orphan"))
+	}, overwritesFiles},
 	{"checkout", has("-B"), "Resets an existing branch to a new start point."},
 	{"switch", has("-C", "--force-create"), "Resets an existing branch to a new start point."},
 	{"mv", has("-f", "--force"), "Overwrites the destination file."},
@@ -225,6 +249,44 @@ func Warnings(args []string) []string {
 		}
 	}
 	return out
+}
+
+// WarningsIn is Warnings plus the cases that need the repository to decide. A lone argument to
+// "git checkout" is a path (and overwrites its edits) unless it names a commit, branch, tag or
+// remote branch; Warnings cannot tell, so it stays silent. With a nil repo this is Warnings.
+func WarningsIn(repo *git.Repo, args []string) []string {
+	out := Warnings(args)
+	if repo == nil {
+		return out
+	}
+	a := Parse(args, Subs)
+	if a.Cmd != "checkout" || a.Has("-b", "-B", "--orphan", "--detach", "-t", "--track") || len(a.AfterDash()) > 0 {
+		return out
+	}
+	pos := a.Positional()
+	if len(pos) != 1 || namesARef(repo, pos[0]) || contains(out, overwritesFiles) {
+		return out
+	}
+	return append(out, overwritesFiles)
+}
+
+// namesARef reports whether x is something "git checkout x" would switch to: a commit, branch or
+// tag, or a remote-only branch that git would create locally.
+func namesARef(repo *git.Repo, x string) bool {
+	if repo.OK("rev-parse", "--verify", "-q", x+"^{commit}") {
+		return true
+	}
+	refs, err := repo.Output("for-each-ref", "--format=%(refname)", "refs/remotes")
+	if err != nil {
+		return false
+	}
+	for _, ref := range strings.Split(refs, "\n") {
+		// refs/remotes/<remote>/<branch>: git's DWIM matches <branch> in any remote.
+		if parts := strings.SplitN(strings.TrimPrefix(ref, "refs/remotes/"), "/", 2); len(parts) == 2 && parts[1] == x {
+			return true
+		}
+	}
+	return false
 }
 
 func contains(xs []string, x string) bool {
