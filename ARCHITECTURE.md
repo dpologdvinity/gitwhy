@@ -187,27 +187,48 @@ Package `internal/snapshot`. A snapshot lives in `<gitdir>/gitwhy/snapshots/<id>
 | Sparse-checkout settings | config values and files |
 | Stashes | the stash list (`Stashes`) |
 
-The working-tree commit has every local branch tip, `HEAD` and stash entry as a parent, and a ref
-`refs/gitwhy/snapshots/<id>` keeps it alive, so `git gc` cannot delete what undo needs. The last
-**20** snapshots per worktree are kept (`Keep`); older ones are pruned.
+The working-tree commit has as parents every commit that `HEAD`, a ref (branches, tags and
+remote-tracking branches; tags are peeled to their commit) or a stash entry points to, and a ref
+`refs/gitwhy/snapshots/<id>` keeps it alive. Other objects refs point to, such as annotated tag
+objects, are kept alive by `refs/gitwhy/snapshots/<id>-<object ID>`. So `git gc` cannot delete what
+undo needs. The last **20** snapshots per worktree are kept (`Keep`). Pruning also removes the folders
+of interrupted snapshots (no `meta.json`, older than 10 minutes) and any snapshot ref whose ID has no
+folder in any worktree of the repository (for example after `git worktree remove`).
+
+`Finish` runs after the command and records the refs and the stash list as they are then (`After`),
+so undo can tell what the command changed from what you changed later.
 
 **Restore** (`Restore`) works in this order:
 
 1. It checks that everything it needs still exists (the saved working-tree commit and the commit
    `HEAD` was on) **before touching anything**, and stops with a plain message if `gc` removed it.
 2. It saves the current state as a new snapshot (`Result.Before`), so an undo can itself be undone.
-   Files the undo is about to overwrite that this snapshot would not normally save, because they
-   are ignored now, are added to it first (`overwrittenUnsaved`).
-3. It moves all refs in **one transaction**, so a failure there changes nothing.
-4. It restores `HEAD`, the index, working-tree files and any deleted objects.
+   Ignored files the undo is about to overwrite or delete (including ones inside a folder that
+   replaces a file) are added to it first (`overwrittenUnsaved`).
+3. It moves refs in two steps: refs that go away are deleted in one transaction, then the rest are
+   written back in another, so `foo` and `foo/bar` can swap places. If the second step fails, the
+   deleted refs are created again, so a failure there changes nothing.
+4. It restores `HEAD`, the index, working-tree files and any deleted objects. If some file cannot
+   be written or removed it still restores all the others, then reports the errors and says that
+   running `gitwhy undo` again returns to the state before this undo.
+5. It calls `Finish` on the "before" snapshot, so redoing an undo also leaves later work alone.
 
 Rules that protect your work:
 
 - A ref is restored only if it is still at the value `Finish` recorded (`After`). A branch you
   moved afterwards, in plain git or another worktree, is left alone and listed in
   `Result.Skipped`.
+- If the branch `HEAD` was on is skipped, checked out in another worktree, or its commits are gone,
+  `HEAD`, the index and the files are left alone too (they would not match the branch).
+- Stashes made after the command are kept: they are put back on top of the restored list.
 - Branches checked out in another worktree are not touched (`checkedOutElsewhere`).
+- Sparse-checkout settings are restored in the shared config file only; `config.worktree` is copied
+  as a file, so one worktree's settings never leak into another.
 - Submodules (gitlinks) are handled separately from regular files.
+
+File names are literal: `internal/git` runs every git command with `GIT_LITERAL_PATHSPECS=1`, so a
+file called `[ab].txt` never matches `a.txt`. Commands the user typed (`gitwhy run git ...`) and
+their previews turn that off again, so a quoted `'*.c'` still globs like the real git.
 
 Anything already sent to a remote (`push`) cannot be undone locally. The danger rules say so.
 
