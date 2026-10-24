@@ -70,6 +70,28 @@ func (r Runner) OutputIn(stdin io.Reader, args ...string) (string, error) {
 	return out.String(), nil
 }
 
+// Stream runs git with stdin and hands stdout to read as it arrives, so large output is never
+// held in memory. Whatever read leaves unread is discarded.
+func (r Runner) Stream(stdin io.Reader, read func(stdout io.Reader) error, args ...string) error {
+	c := r.cmd(args...)
+	c.Stdin = stdin
+	var errb bytes.Buffer
+	c.Stderr = &errb
+	out, err := c.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := c.Start(); err != nil {
+		return &Error{Args: args, Err: err}
+	}
+	rerr := read(out)
+	_, _ = io.Copy(io.Discard, out) // let git finish writing
+	if err := c.Wait(); err != nil {
+		return &Error{Args: args, Stderr: errb.String(), Err: err}
+	}
+	return rerr
+}
+
 // OK reports whether git exits 0.
 func (r Runner) OK(args ...string) bool {
 	_, err := r.Output(args...)
