@@ -707,6 +707,64 @@ func TestSparseRedoStaysInThisWorktree(t *testing.T) {
 	}
 }
 
+// TestPruneRemovesOrphans proves prune removes what an interrupted Take or a removed worktree
+// leaves behind (an old folder without meta.json, refs without a folder), and keeps a folder
+// that may still be in use and the snapshots of a live worktree.
+func TestPruneRemovesOrphans(t *testing.T) {
+	r := testrepo.New(t)
+	head := r.Commit("one", "a.txt", "1\n")
+	old := filepath.Join(r.GitDir, "gitwhy", "snapshots", "oldhalf")
+	fresh := filepath.Join(r.GitDir, "gitwhy", "snapshots", "freshhalf")
+	r.Write(".git/gitwhy/snapshots/oldhalf/index", "x")
+	r.Write(".git/gitwhy/snapshots/freshhalf/index", "x")
+	hour := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(old, hour, hour); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"oldhalf", "freshhalf", "nofolder", "nofolder-" + head} {
+		r.Git("update-ref", "refs/gitwhy/snapshots/"+id, head)
+	}
+	wtDir := filepath.Join(t.TempDir(), "wt")
+	r.Git("worktree", "add", "-q", "-b", "other", wtDir)
+	wt, err := git.Open(wtDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := Take(wt, "in the other worktree", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Take(r.Repo, "t", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); err == nil {
+		t.Error("old folder without meta.json kept")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Error("fresh folder deleted")
+	}
+	refs := r.Git("for-each-ref", "--format=%(refname)", "refs/gitwhy/snapshots/")
+	for _, id := range []string{"oldhalf", "nofolder"} {
+		if strings.Contains(refs, "/"+id) {
+			t.Errorf("ref %s kept", id)
+		}
+	}
+	for _, id := range []string{"freshhalf", theirs.ID} {
+		if !strings.Contains(refs, "/"+id+"\n") && !strings.HasSuffix(refs, "/"+id) {
+			t.Errorf("ref %s deleted", id)
+		}
+	}
+
+	r.Git("worktree", "remove", wtDir)
+	if _, err := Take(r.Repo, "t", nil); err != nil {
+		t.Fatal(err)
+	}
+	if refs := r.Git("for-each-ref", "refs/gitwhy/snapshots/"+theirs.ID); refs != "" {
+		t.Errorf("ref of a removed worktree kept: %s", refs)
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()

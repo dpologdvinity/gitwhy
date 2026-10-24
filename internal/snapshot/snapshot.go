@@ -315,6 +315,60 @@ func prune(r *git.Repo, keep string) {
 			Delete(r, s)
 		}
 	}
+	pruneOrphans(r)
+}
+
+// staleAfter is how old a snapshot folder without meta.json must be before prune treats it as
+// left over from an interrupted Take rather than one still being written.
+const staleAfter = 10 * time.Minute
+
+// pruneOrphans removes what an interrupted Take or a removed worktree leaves behind: this
+// worktree's old snapshot folders without meta.json, and snapshot refs whose folder exists in no
+// worktree (refs are shared by all worktrees, folders are not).
+func pruneOrphans(r *git.Repo) {
+	entries, _ := os.ReadDir(root(r))
+	for _, e := range entries {
+		dir := filepath.Join(root(r), e.Name())
+		if _, err := os.Lstat(filepath.Join(dir, "meta.json")); !errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > staleAfter {
+			os.RemoveAll(dir)
+		}
+	}
+
+	// Every worktree's git dir: the main one and <common>/worktrees/<name>. If any can't be
+	// read, keep every ref rather than risk deleting one still in use.
+	gitDirs := []string{r.Common, r.GitDir}
+	wts, err := os.ReadDir(filepath.Join(r.Common, "worktrees"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	for _, w := range wts {
+		gitDirs = append(gitDirs, filepath.Join(r.Common, "worktrees", w.Name()))
+	}
+	ids := map[string]bool{}
+	for _, g := range gitDirs {
+		es, err := os.ReadDir(filepath.Join(g, "gitwhy", "snapshots"))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		for _, e := range es {
+			ids[e.Name()] = true
+		}
+	}
+	out, err := r.Output("for-each-ref", "--format=%(refname)", refPrefix)
+	if err != nil {
+		return
+	}
+	var tx strings.Builder
+	for _, name := range strings.Split(out, "\n") {
+		id, _, _ := strings.Cut(strings.TrimPrefix(name, refPrefix), "-")
+		if name != "" && !ids[id] {
+			fmt.Fprintf(&tx, "delete %s\n", name)
+		}
+	}
+	updateRefs(r, tx.String())
 }
 
 // Result of a restore.
