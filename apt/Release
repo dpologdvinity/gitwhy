@@ -1,0 +1,20 @@
+Architectures: amd64 arm64
+Date: Sat, 24 Oct 2026 02:52:21 +0000
+Label: gitwhy
+Origin: gitwhy
+MD5Sum:
+ 7b57fc3172d025f234c1fd8a70dba6c1             1316 Packages
+ d279fbb7d826131f286026a771714768              685 Packages.gz
+ 7c4ba6538aefe14c8e636a742ae62eee               94 Release
+SHA1:
+ 8e55664e51b2da4a50ace3af16d05b9331f8f7cd             1316 Packages
+ 2bf23de1030236ad52bdcb26c14780a1c177820f              685 Packages.gz
+ ad4122bfad495f44ac85c385e5b79ae1192d1cda               94 Release
+SHA256:
+ ae5f3e0a4f5c35048a8c932d3a5c91d29fdcd745dc5d6c6d939a61833c013eaa             1316 Packages
+ 62434d64d868db68577081cf291e6a48deb2237b84fffa4d2d5f0bba61016838              685 Packages.gz
+ e0fa825e5ecc8b2db495cb343d1705557588de43708a4b8cfdfff23005e6d495               94 Release
+SHA512:
+ c54354473a33b7a0be762b30fa408119c177491e778ffdf972ba6c3ad8dd3b1a44b1842685cc3a3cd20a3f2bbf8ea9a233b2f46f8f2396e8e409dc433545b6cc             1316 Packages
+ 02c9b6deffd0cbba18dc55528efbc934bda1d37c5d5f21f9c41bed37ecbd53f3739ad3463acfb0e2e1b100c002638dda175a688a61b1f3043653166253cb9392              685 Packages.gz
+ c66d51137a9962d855c529441ff39be7e93dba9ba84497317d3f94c332b92ab2e897969ab6c4acc939066b8479d230110ab46670add4e743d4e8cf1289772289               94 Release

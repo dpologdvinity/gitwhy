@@ -1,0 +1,7 @@
+[gitwhy]
+name=gitwhy
+baseurl=https://dpologdvinity.github.io/gitwhy/rpm
+enabled=1
+gpgcheck=0
+repo_gpgcheck=1
+gpgkey=https://dpologdvinity.github.io/gitwhy/gitwhy.asc
