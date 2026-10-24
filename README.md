@@ -1,5 +1,9 @@
 # gitwhy
 
+[![ci](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml)
+[![latest release](https://img.shields.io/github/v/release/dpologdvinity/gitwhy)](https://github.com/dpologdvinity/gitwhy/releases/latest)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Do anything with git without looking it up. See what will happen first. Undo it after.**
 
 For interns, new grads, and anyone who still searches "how to undo last commit".
@@ -15,6 +19,18 @@ No AI, no account, no network: one binary that runs the real `git`.
 - **Undo anything it ran.** Before running, gitwhy saves branches, staged and unstaged changes, untracked files, stashes, and merge/rebase state. `gitwhy undo` puts it all back, even after `reset --hard` or `clean -fdx`.
 - **Recover from plain git too.** `gitwhy recover` reads git's history of your branch ("2h ago: pulled 14 commits from origin/master") and takes you back to before any of it. It also finds lost commits and staged files git still has.
 - **Every git command and flag.** `gitwhy build` walks you through any command with every flag explained in a few words, from [the docs in this repo](docs/README.md) (181 commands, ~3,500 flags, git 2.56).
+
+## Quickstart
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh   # install (other ways below)
+cd your-repo
+gitwhy                                  # full-screen home: changes, commits, branches, next steps
+gitwhy undo last commit                 # say what you want; it asks only what it needs
+gitwhy undo                             # changed your mind: put everything back
+```
+
+You need **git 2.40 or newer**. That is all: no account, no network, no setup.
 
 ## The home screen
 
@@ -52,7 +68,7 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 ## Install
 
-Needs git 2.38+. Tested on Linux, WSL and Windows (CI); macOS builds but is untested.
+Needs git 2.40+. Tested on Linux, WSL and Windows (CI); macOS builds but is untested.
 
 ### Linux and macOS
 
@@ -115,10 +131,11 @@ checksum, at install or on first run.
 ### Nix
 
 ```sh
-nix run github:dpologdvinity/gitwhy
-nix profile install github:dpologdvinity/gitwhy
+nix --extra-experimental-features 'nix-command flakes' run github:dpologdvinity/gitwhy
+nix --extra-experimental-features 'nix-command flakes' profile add github:dpologdvinity/gitwhy
 ```
 
+(Leave out the `--extra-experimental-features` part if flakes are already enabled in your Nix config.)
 This builds from source, so `gitwhy version` shows the commit instead of a version number.
 
 ### From source (Go 1.26+)
@@ -152,19 +169,40 @@ gitwhy hook install
 ```
 
 This wraps `git` in your shell so `gitwhy undo` works for commands you type yourself. It snapshots
-before risky commands only (like `reset --hard` or `clean -fd`), costs a few ms on other commands, and works
-in bash and zsh. Set `GITWHY_HOOK_OFF=1` to pause it; `gitwhy hook uninstall` removes it.
+before risky commands only (like `reset --hard`, `checkout <file>` or `clean -fd`), costs a few ms on
+other commands, and works in bash and zsh. Set `GITWHY_HOOK_OFF=1` to pause it; `gitwhy hook uninstall`
+removes it.
+
+It sees through global options (`git -C dir ...`, `git -c k=v ...`, `git --no-pager ...`) and simple
+aliases (`alias.rh = reset --hard`). It does **not** cover `--git-dir` or `--work-tree` (it cannot tell
+which repository you mean), shell aliases (starting with `!`), or git run by other programs.
+
+## How it works
+
+gitwhy is one Go binary that runs the real `git`. Every change goes through the same pipeline:
+
+1. **Plan:** a recipe (a goal such as "undo last commit") or a literal command becomes concrete git commands.
+2. **Show:** gitwhy previews the result with git's dry runs, warns about danger, and explains each part.
+3. **Save:** after you confirm, it takes a snapshot of branches, files, index, stashes and state.
+4. **Run:** it runs the git commands, then records what changed so `gitwhy undo` can reverse exactly that.
+
+The engine (`internal/snapshot`, `preview`, `danger`, `recipe`, `explain`) has no user interface; `internal/ui`
+(prompts) and `internal/tui` (full screen) sit on top. [ARCHITECTURE.md](ARCHITECTURE.md) has the diagrams,
+the data on disk and the design decisions.
 
 ## Development
 
 ```sh
-go test ./...                    # unit + end-to-end tests (real git, temp repos)
+go test ./...                       # unit + end-to-end tests (real git, temp repos)
+golangci-lint run ./...             # must report "0 issues."
 python3 scripts/check_coverage.py   # every flag in your git's -h/man pages is documented
 python3 scripts/build_index.py      # rebuild docs/README.md
 ```
 
-Docs are original plain-English descriptions (git's own docs are GPL-2.0; nothing is copied).
-Format: [docs/STYLE.md](docs/STYLE.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) explains the workflow, the CI checks every pull request must pass,
+and how to add a recipe, a warning or a command doc. Docs are original plain-English descriptions (git's
+own docs are GPL-2.0; nothing is copied). Format: [docs/STYLE.md](docs/STYLE.md). Report security problems
+privately through the repository's Security tab.
 
 ## License
 

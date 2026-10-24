@@ -7,7 +7,7 @@ is put together, read [ARCHITECTURE.md](ARCHITECTURE.md) first.
 
 You need:
 
-- **git 2.38 or newer** (previews use `git merge-tree --write-tree`).
+- **git 2.40 or newer** (previews use `git merge-tree --write-tree --merge-base`).
 - **Go 1.26 or newer** (the version in `go.mod`).
 - Optional: Node 18+ (the npm package tests), Docker (the package and repo tests), and
   [golangci-lint](https://golangci-lint.run) v2 (the same linter CI runs).
@@ -23,14 +23,41 @@ go build -o gitwhy ./cmd/gitwhy
 
 ## Run the checks
 
-Run these before you open a pull request. CI runs the same ones on Linux and Windows.
+Run these before you open a pull request. CI runs the same ones, plus a few more (see below).
 
 ```sh
+gofmt -l $(git ls-files '*.go' | grep -v '^third_party/')   # must print nothing
 go vet ./...
 go test ./...                       # unit and end-to-end tests; real git, temporary repositories (about 90 s)
 golangci-lint run ./...             # must report "0 issues."
 node --test npm/lib.test.js         # the npm package
 ```
+
+CI (`.github/workflows/ci.yml`) is the authority. On top of the commands above it runs `govulncheck`,
+`actionlint`, `shellcheck`, checks that `go.mod`/`go.sum` are tidy and that `THIRD_PARTY_LICENSES` is up
+to date (`scripts/third-party-licenses.sh` regenerates it), builds every release artifact with goreleaser
+in snapshot mode, and builds the Nix flake. All of it must be green before a merge.
+
+### Coverage
+
+The Linux test job measures statement coverage and fails below the floor set by `COVERAGE_FLOOR` in
+`ci.yml` (45% today; the real number was 46.6% when it was set). Only code run in-process by `go test`
+counts: the end-to-end tests run the built binary, so `cmd/gitwhy` and `internal/ui` show 0%. When you
+add tests that raise the total, raise the floor in the same change so it never drops back. Check it
+locally with:
+
+```sh
+go test -covermode=atomic -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+```
+
+### Pinned actions and tools
+
+Every third-party GitHub Action is pinned to a full commit SHA with its version in a comment, and every
+tool the workflows install has an exact version. Do not use a tag like `@v4`. Dependabot opens a weekly
+grouped pull request that moves both. To pin a new action by hand, resolve the tag to a commit with
+`gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (for an annotated tag, follow the `tag` object to its
+commit). If `go.mod` or `go.sum` change, rebuild the Nix flake and update `vendorHash` in `flake.nix`:
+set it to `pkgs.lib.fakeHash`, build once, and copy the hash from the error.
 
 Run just one package or test while you work:
 
@@ -116,8 +143,22 @@ Maintainers only. Tag the commit on `main`:
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-The release workflow builds and publishes everything; see
-[Build, release and packaging](ARCHITECTURE.md#build-release-and-packaging). The `verify-install`
+The release workflow runs the CI gates first and then builds and publishes everything; see
+[Build, release and packaging](ARCHITECTURE.md#build-release-and-packaging).
+
+Repository secrets the release uses (Settings -> Secrets and variables -> Actions):
+
+| Secret | Used for | Required |
+|---|---|---|
+| `HOMEBREW_TAP_TOKEN` | pushes the Homebrew cask and Scoop manifest to `dpologdvinity/homebrew-gitwhy` (needs Contents read and write on that repository) | yes |
+| `GPG_PRIVATE_KEY` | signs the apt and dnf repositories | yes |
+| `GPG_PASSPHRASE` | unlocks that key | only if the key has a passphrase |
+| `NPM_TOKEN` | publishes `@kaitlynbassford/gitwhy` | yes |
+| `WINGET_TOKEN` | opens the winget-pkgs pull request | no (the step is skipped without it) |
+
+Before tagging, run the `check-secrets` workflow from the Actions tab: it reports which secrets are set,
+and checks that the tap token can write to the tap and that the signing key can sign. It never prints a
+secret. The `verify-install`
 workflow then installs the new release every supported way. If a job fails, fix it with a pull
 request and tag a new patch version; do not re-use a published tag, because npm and package
 repositories do not allow it.

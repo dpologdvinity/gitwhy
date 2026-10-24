@@ -47,8 +47,8 @@ These rules explain most of the code. When you change something, keep them true.
    them, and it reports what it left alone.
 6. **No AI, no network, no secrets at run time.** The binary only talks to the local `git`.
 7. **Text for users is plain English and short.** The docs follow [docs/STYLE.md](docs/STYLE.md).
-8. **Needs git 2.38 or newer** (`checkGit` in `cmd/gitwhy/main.go`), because previews rely on
-   `git merge-tree --write-tree`.
+8. **Needs git 2.40 or newer** (`checkGit` in `cmd/gitwhy/main.go`), because previews rely on
+   `git merge-tree --write-tree --merge-base`.
 
 ## Repository layout
 
@@ -319,25 +319,39 @@ from a deleted branch or a hard reset, and dangling staged files.
 | Package and repo install | `scripts/test-repos.sh`, `scripts/test-pkgs.sh` | Docker: builds the signed apt and dnf repos with a throwaway key, installs from them, checks that tampering is rejected |
 | After each release | `.github/workflows/verify-install.yml` | installs the real release with apt, dnf, npm, Homebrew, Scoop and PowerShell |
 
-CI (`.github/workflows/ci.yml`) runs `go vet`, `go test ./...` and the npm tests on Linux and
-Windows, and `golangci-lint` on Linux. A Windows-only step also runs the remote tests with
-`core.autocrlf=true`, the Git for Windows default, and runs `install.ps1` under PowerShell 7 and
-5.1. `.github/workflows/packages.yml` builds the Linux packages and tests them when packaging files
-change.
+CI (`.github/workflows/ci.yml`) is one pipeline with these jobs, and `fail-fast` everywhere:
+
+| Job | What it checks |
+|---|---|
+| `setup` | dependencies download and verify (`go mod verify`), `go.mod` and `go.sum` are tidy, the whole module compiles |
+| `lint` | `gofmt`, `go vet`, `golangci-lint`, `govulncheck`, `actionlint`, `shellcheck`, syntax of the npm and Python files, and that `THIRD_PARTY_LICENSES` is up to date |
+| `test` | the full suite on Linux and Windows. Linux also measures statement coverage and fails below the floor (`COVERAGE_FLOOR` in `ci.yml`). Windows also runs the remote tests with `core.autocrlf=true` (the Git for Windows default) and `install.ps1` under PowerShell 7 and 5.1 |
+| `build` | `goreleaser check`, a snapshot build of every release artifact, then `scripts/test-repos.sh` and `scripts/test-pkgs.sh` install them in clean containers. The artifacts are kept for 7 days |
+| `nix` | builds the Nix flake (fails when `vendorHash` is stale) |
+
+Coverage counts only what `go test` runs in-process. The end-to-end tests run the built binary, so
+they prove behavior but are not counted: `cmd/gitwhy` and `internal/ui` show 0%. Every third-party
+action is pinned to a full commit SHA and every tool to an exact version; Dependabot proposes the
+updates. `.github/workflows/check-secrets.yml` (manual) checks that the release secrets are set and
+that the Homebrew token can write to the tap.
 
 ## Build, release and packaging
 
-A tag `v*` triggers `.github/workflows/release.yml`:
+A tag `v*` triggers `.github/workflows/release.yml`. It calls the CI pipeline first, so nothing is
+published unless lint, tests and the build pass. Releases run one at a time and are never cancelled.
 
-1. **goreleaser** builds Linux, macOS and Windows binaries (amd64 and arm64), `.deb`, `.rpm`,
-   `.apk` and Arch packages, checksums, and a GitHub release. It also publishes a Homebrew cask
-   and a Scoop manifest to the `homebrew-gitwhy` repository, and (with a token) opens a winget PR.
-2. **`repos` job** builds a signed apt repository and dnf repository from the release's packages
+1. **`release` job**: goreleaser builds Linux, macOS and Windows binaries (amd64 and arm64), `.deb`,
+   `.rpm`, `.apk` and Arch packages, checksums, and a GitHub release. The archives and packages
+   include `THIRD_PARTY_LICENSES`, and the `.deb`/`.rpm` require `git >= 2.40`. It also publishes a
+   Homebrew cask and a Scoop manifest to the `homebrew-gitwhy` repository, and (with a token) opens
+   a winget PR.
+2. **`repos` job**: builds a signed apt repository and dnf repository from the release's packages
    (`scripts/build-repos.sh`) and publishes them to the `gh-pages` branch, served by GitHub Pages.
-3. **`npm` job** publishes `@kaitlynbassford/gitwhy`, a package that downloads and verifies the
-   release binary.
-4. **`verify-install`** then installs the new release every supported way on real operating
-   systems.
+3. **`npm` job**: publishes `@kaitlynbassford/gitwhy` (with provenance), a package that downloads
+   and verifies the release binary.
+4. **`verify-install`** then installs the new release every supported way (apt, dnf, npm, Homebrew,
+   Scoop, `install.ps1`, `install.sh`, Nix) on real operating systems, waiting for GitHub Pages to
+   publish, and fails if any of them reports the wrong version.
 
 `install.sh` and `install.ps1` download the release archive and **verify its SHA-256 against
 `checksums.txt` before installing**. `flake.nix` builds from source for Nix.
