@@ -145,6 +145,23 @@ func TestUnstageInRepoWithoutCommits(t *testing.T) {
 	}
 }
 
+// TestDeleteUntrackedFilePresetsIt proves that d on one untracked file deletes only that file
+// (delete-untracked with a files preset), not every untracked file.
+func TestDeleteUntrackedFilePresetsIt(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Write("important-notes.txt", "keep\n")
+	r.Write("scratch.txt", "x\n")
+	m := &model{repo: r.Repo}
+	m.load()
+	m.key("down")
+	a, ok := m.tabKey("d", m.cursor[tabChanges])
+	files, _ := a.Preset["files"].([]string)
+	if !ok || a.Recipe != "delete-untracked" || len(files) != 1 || files[0] != "scratch.txt" {
+		t.Fatalf("d on scratch.txt = %+v", a)
+	}
+}
+
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")

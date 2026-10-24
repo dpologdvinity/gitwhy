@@ -424,7 +424,7 @@ func (m *model) tabKey(k string, i int) (Action, bool) {
 			}
 		case "d":
 			if f.untracked() {
-				return run("delete-untracked", nil), true
+				return run("delete-untracked", recipe.Answers{"files": []string{f.path}}), true
 			}
 			return run("discard-file-changes", recipe.Answers{"files": []string{f.path}}), true
 		case "H":
