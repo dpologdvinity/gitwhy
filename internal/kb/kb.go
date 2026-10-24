@@ -180,8 +180,10 @@ func Parse(md string) *Command {
 			continue
 		}
 
-		if m := sharedRe.FindStringSubmatch(line); m != nil && !contains(c.Shared, m[1]) {
-			c.Shared = append(c.Shared, m[1])
+		for _, m := range sharedRe.FindAllStringSubmatch(line, -1) {
+			if !contains(c.Shared, m[1]) {
+				c.Shared = append(c.Shared, m[1])
+			}
 		}
 
 		if !summaryDone {

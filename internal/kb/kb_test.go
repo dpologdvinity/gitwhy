@@ -71,3 +71,22 @@ func TestParseFlagForms(t *testing.T) {
 		t.Errorf("optional: %+v", f)
 	}
 }
+
+// TestSharedLinksOnOneLine proves that a line linking two shared option pages records both,
+// so "git log -p" finds the diff options and "git format-patch" keeps the revision options.
+func TestSharedLinksOnOneLine(t *testing.T) {
+	k := load(t)
+	for _, name := range []string{"log", "show", "whatchanged", "gitk", "format-patch"} {
+		c := k.Commands[name]
+		if c == nil {
+			t.Errorf("%s: missing", name)
+			continue
+		}
+		if !contains(c.Shared, "diff-options") || !contains(c.Shared, "revision-options") {
+			t.Errorf("%s: shared = %v, want both diff-options and revision-options", name, c.Shared)
+		}
+	}
+	if _, ok := k.Lookup("log", "", "-p"); !ok {
+		t.Error("Lookup(log -p) not found")
+	}
+}
