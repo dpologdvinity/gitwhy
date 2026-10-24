@@ -72,7 +72,7 @@ internal/
   tui/                 Bubble Tea full-screen home
   ui/                  interactive CLI: wizards, menus, run, undo, recover
   testrepo/            throwaway git repositories for tests
-recipes/               60 YAML recipes (goals such as "undo last commit")
+recipes/               YAML recipes (goals such as "undo last commit")
 docs/commands/         one markdown file per git command (181), with every flag explained
 docs/shared/           option tables shared by several commands
 third_party/clipboard/ vendored copy of atotto/clipboard (see Decisions)
