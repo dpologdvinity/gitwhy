@@ -71,8 +71,11 @@ type Step struct {
 	Env  []string `yaml:"env"`  // extra environment, e.g. GIT_SEQUENCE_EDITOR=true
 	Todo []Edit   `yaml:"todo"` // for "rebase -i": edits gitwhy applies to the todo list
 	Note string   `yaml:"note"` // shown before this step runs
-	Fail string   `yaml:"fail"` // with when: stop before anything runs, showing this
-	Warn string   `yaml:"warn"` // with when: add this warning to the preview
+	// Fail and Warn are decided when the recipe is planned, before anything runs, so their `when`
+	// can only use answers known up front, not an answer a later `ask` step collects: by then the
+	// snapshot is taken and earlier steps have run, so the step is skipped instead.
+	Fail string `yaml:"fail"` // with when: stop before anything runs, showing this
+	Warn string `yaml:"warn"` // with when: add this warning to the preview
 }
 
 // Edit changes one line of a rebase todo list, or replaces it with a plan.
