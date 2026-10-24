@@ -311,8 +311,8 @@ func (a *App) askFiles(q *recipe.Question, title string, ans recipe.Answers) err
 	if len(files) > 2000 { // too many to list (monorepo): type the path
 		var v string
 		err := prompt(huh.NewInput().Title(title).Description("Path relative to the repo root").Value(&v))
-		if q.Multi {
-			ans[q.ID] = strings.Fields(v)
+		if q.Multi { // one path, as typed: names can contain spaces
+			ans[q.ID] = []string{v}
 		} else {
 			ans[q.ID] = v
 		}
@@ -364,7 +364,7 @@ func statusPaths(out string) string {
 func splitZ(s string) []string {
 	var out []string
 	for _, p := range strings.Split(s, "\x00") {
-		if p = strings.TrimSpace(p); p != "" {
+		if p != "" { // never trim: file names can start or end with spaces
 			out = append(out, p)
 		}
 	}

@@ -6,7 +6,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -70,4 +72,33 @@ func TestEOFCancels(t *testing.T) {
 			expect(t, "repository state", r.state(), before, out)
 		})
 	}
+}
+
+// TestFileNamesKeepSpaces proves that file pickers keep leading and trailing spaces in names.
+// They used to trim them, so "keep" and "keep " were both listed as "keep" and picking the second
+// threw away changes to the first.
+func TestFileNamesKeepSpaces(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows can't have a file name ending in a space")
+	}
+	r := newRepo(t)
+	r.commit("two", "keep", "a\n", "keep ", "b\n")
+	r.write("keep", "a edited\n")
+	r.write("keep ", "b edited\n")
+	// The list is sorted: 1 is "keep", 2 is "keep ".
+	out := r.do("discard-file-changes", text("2"), text("0"), yes)
+	expect(t, "keep (not picked)", r.read("keep"), "a edited\n", out)
+	expect(t, "keep+space (picked)", r.read("keep "), "b\n", out)
+}
+
+// TestTypedPathWithSpaces proves that when there are too many files to list (over 2000) and the
+// path is typed, a name with spaces is used as one path. It used to be split on spaces.
+func TestTypedPathWithSpaces(t *testing.T) {
+	r := newRepo(t)
+	for i := range 2001 {
+		r.write(fmt.Sprintf("many/%04d.txt", i), "x\n")
+	}
+	r.write("my file.txt", "x\n")
+	out := r.do("stage-files", text("my file.txt"), yes)
+	expect(t, "staged", r.git("diff", "--cached", "--name-only"), "my file.txt", out)
 }
