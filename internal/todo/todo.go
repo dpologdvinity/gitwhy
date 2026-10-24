@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Item is one change to the todo list.
@@ -23,18 +24,38 @@ type Plan struct {
 	Full  []Item `json:"full,omitempty"`  // the exact new order of every pick line
 }
 
-// Write saves a plan in a new temp directory and returns its path.
+// Write saves a plan in a new temp directory and returns its path. Apply deletes the directory
+// once git has read the plan; Write first deletes ones older than a day that were never run.
 func Write(p Plan) (string, error) {
-	dir, err := os.MkdirTemp("", "gitwhy-todo-")
-	if err != nil {
-		return "", err
-	}
+	removeStale(os.TempDir(), 24*time.Hour)
 	data, err := json.Marshal(p)
 	if err != nil {
 		return "", err
 	}
+	dir, err := os.MkdirTemp("", tempPrefix)
+	if err != nil {
+		return "", err
+	}
 	path := filepath.Join(dir, "plan.json")
-	return path, os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		_ = os.RemoveAll(dir) // best effort: the write error is the one to report
+		return "", err
+	}
+	return path, nil
+}
+
+// tempPrefix starts the name of every directory Write makes.
+const tempPrefix = "gitwhy-todo-"
+
+// removeStale deletes Write's directories in tmp older than age: plans written for a rebase that
+// never ran, for example because the user said no at the prompt.
+func removeStale(tmp string, age time.Duration) {
+	dirs, _ := filepath.Glob(filepath.Join(tmp, tempPrefix+"*"))
+	for _, d := range dirs {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() && time.Since(fi.ModTime()) > age {
+			_ = os.RemoveAll(d) // best effort: another user's directory may not be ours to delete
+		}
+	}
 }
 
 // Editor returns the GIT_SEQUENCE_EDITOR value that applies plan with the gitwhy binary self.
@@ -42,22 +63,41 @@ func Editor(self, plan string) string {
 	return "GIT_SEQUENCE_EDITOR=" + quote(self) + " __todo " + quote(plan)
 }
 
+// quote wraps s in single quotes for the POSIX shell that git runs editors and exec steps in.
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// line is one line of the todo file.
 type line struct {
-	text   string
-	action string
+	text   string // the line as written
+	action string // its todo command ("pick", "p", "exec", ...); "" for comments and blank lines
 	commit string // abbreviated ID as written
 	rest   string // subject
 }
 
+// commands are the todo commands git writes or accepts, long and short forms.
+var commands = map[string]bool{
+	"pick": true, "p": true, "reword": true, "r": true, "edit": true, "e": true,
+	"squash": true, "s": true, "fixup": true, "f": true, "exec": true, "x": true,
+	"break": true, "b": true, "drop": true, "d": true, "label": true, "l": true,
+	"reset": true, "t": true, "merge": true, "m": true, "update-ref": true, "u": true,
+	"noop": true,
+}
+
+// isPick reports whether todo command a is pick, long or short.
 func isPick(a string) bool { return a == "pick" || a == "p" }
 
-// Apply rewrites the todo file at todoPath according to the plan at planPath.
+// Apply rewrites the todo file at todoPath according to the plan at planPath. With Full, the
+// pick lines are replaced in the plan's order and any other step makes it refuse; with Edits,
+// only the matching pick lines change. It deletes the plan once read.
 func Apply(planPath, todoPath string) error {
 	data, err := os.ReadFile(planPath)
 	if err != nil {
 		return err
+	}
+	// git reads the plan once; nothing in it is needed after this, so delete it and its directory.
+	_ = os.Remove(planPath) // best effort: a leftover file is only clutter
+	if dir := filepath.Dir(planPath); strings.HasPrefix(filepath.Base(dir), tempPrefix) {
+		_ = os.Remove(dir) // fails, harmlessly, if something else is in it
 	}
 	var p Plan
 	if err := json.Unmarshal(data, &p); err != nil {
@@ -71,25 +111,28 @@ func Apply(planPath, todoPath string) error {
 	for _, t := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
 		l := line{text: t}
 		f := strings.Fields(t)
-		if len(f) >= 2 && !strings.HasPrefix(t, "#") {
-			l.action, l.commit = f[0], f[1]
+		// Anything that does not start with a todo command is a comment, whatever core.commentChar is.
+		if len(f) >= 1 && commands[f[0]] {
+			l.action = f[0]
+		}
+		if l.action != "" && len(f) >= 2 {
+			l.commit = f[1]
 			l.rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t), f[0]+" "+f[1]))
 		}
 		lines = append(lines, l)
 	}
-	msgDir := filepath.Dir(planPath)
-	n := 0
 	render := func(it Item, l line) ([]string, error) {
 		switch it.Action {
 		case "pick", "drop", "edit", "squash", "fixup":
 			return []string{it.Action + " " + l.commit + " " + l.rest}, nil
 		case "reword":
-			n++
-			mf := filepath.Join(msgDir, fmt.Sprintf("msg-%d.txt", n))
-			if err := os.WriteFile(mf, []byte(it.Message+"\n"), 0o600); err != nil {
-				return nil, err
+			// The message travels in the exec line itself (one quoted argument per line, since a
+			// todo step is one line), so no file has to outlive this editor run.
+			var args []string
+			for _, ml := range strings.Split(it.Message, "\n") {
+				args = append(args, quote(ml))
 			}
-			return []string{"pick " + l.commit + " " + l.rest, "exec git commit --amend --only --allow-empty --no-verify -F " + quote(mf)}, nil
+			return []string{"pick " + l.commit + " " + l.rest, `exec printf '%s\n' ` + strings.Join(args, " ") + " | git commit --amend --only --allow-empty --no-verify -F -"}, nil
 		}
 		return nil, fmt.Errorf("unknown action %q", it.Action)
 	}

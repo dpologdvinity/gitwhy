@@ -7,6 +7,8 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestGraphActionsOutsideHistory proves that history-rewriting keys refuse a commit that is not
+// on HEAD's branch, while p still offers to copy it here.
 func TestGraphActionsOutsideHistory(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "a.txt", "a\n")
@@ -35,6 +37,8 @@ func TestGraphActionsOutsideHistory(t *testing.T) {
 	}
 }
 
+// TestGraphCursorSkipsConnectors proves that the Commits cursor counts only commit rows, not
+// the graph's connector rows.
 func TestGraphCursorSkipsConnectors(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "a.txt", "a\n")
@@ -61,6 +65,8 @@ func TestGraphCursorSkipsConnectors(t *testing.T) {
 	}
 }
 
+// TestCopyKeyRefusedForCommitOnBranch proves that p refuses to copy a commit that is already
+// on the current branch.
 func TestCopyKeyRefusedForCommitOnBranch(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -71,6 +77,8 @@ func TestCopyKeyRefusedForCommitOnBranch(t *testing.T) {
 	}
 }
 
+// TestAllToggleKeepsSelectedCommit proves that a (show all branches) keeps the same commit
+// selected though the graph changes.
 func TestAllToggleKeepsSelectedCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "a.txt", "a\n")
