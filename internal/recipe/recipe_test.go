@@ -163,3 +163,26 @@ func TestTruthy(t *testing.T) {
 		}
 	}
 }
+
+// TestPredictsDoNotPrintListsAsBrackets checks that a recipe's predict text shows a list answer
+// as readable words, not as Go's "[a b]": the sparse-checkout recipe names the folders you keep.
+func TestPredictsDoNotPrintListsAsBrackets(t *testing.T) {
+	rs, err := Load(os.DirFS("../.."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rs {
+		if r.ID != "sparse-checkout" {
+			continue
+		}
+		got, err := Render(r.Predict, Answers{"dirs": []string{"apps/web", "libs/ui"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "apps/web, libs/ui") || strings.Contains(got, "[") {
+			t.Fatalf("predict = %q, want the folders joined with commas and no brackets", got)
+		}
+		return
+	}
+	t.Fatal("no sparse-checkout recipe")
+}

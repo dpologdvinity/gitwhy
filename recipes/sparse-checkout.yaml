@@ -9,4 +9,4 @@ questions:
   - {id: dirs, ask: "Folders to keep (space-separated, e.g. apps/web libs/ui)", type: text, split: true}
 steps:
   - git: [sparse-checkout, set, --cone, "{{.dirs}}"]
-predict: Only {{.dirs}} (plus files at the top level) stay in your working folder. Other folders disappear from disk but stay in git. Ignored files inside removed folders are deleted.
+predict: Only {{join .dirs ", "}} (plus files at the top level) stay in your working folder. Other folders disappear from disk but stay in git. Ignored files inside removed folders are deleted.

@@ -110,7 +110,17 @@ func (r *Recipe) Question(id string) *Question {
 }
 
 // funcs is the set of extra functions recipe templates may call; "join" joins a list answer.
-var funcs = template.FuncMap{"join": strings.Join}
+// It also accepts a text answer (returned as is) and an answer that is not known yet (empty), so
+// a recipe's predict text can be rendered before every question has been asked.
+var funcs = template.FuncMap{"join": func(list any, sep string) string {
+	switch v := list.(type) {
+	case []string:
+		return strings.Join(v, sep)
+	case string:
+		return v
+	}
+	return ""
+}}
 
 // Render executes a template string with the answers. A missing answer renders as an empty
 // string, not "<no value>".
