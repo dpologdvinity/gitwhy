@@ -4,6 +4,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"strings"
@@ -188,15 +189,28 @@ func Confirm(title string, def bool) (bool, error) {
 // set ACCESSIBLE=1 or GITWHY_ACCESSIBLE=1.
 var accessible = os.Getenv("ACCESSIBLE") != "" || os.Getenv("GITWHY_ACCESSIBLE") != ""
 
-func prompt(f huh.Field) error {
+func prompt(f huh.Field) (err error) {
 	if accessible {
+		defer func() {
+			if v := recover(); v != nil {
+				if v != errEOF {
+					panic(v)
+				}
+				err = huh.ErrUserAborted
+			}
+		}()
 		return f.RunAccessible(os.Stdout, lineReader{})
 	}
 	return huh.Run(f)
 }
 
+// errEOF is what lineReader panics with when stdin is used up. huh's plain-text prompts treat
+// end of input as an empty answer (take the default) and re-ask forever when the default is not
+// valid, so prompt recovers it and cancels instead.
+var errEOF = errors.New("end of input")
+
 // lineReader reads stdin at most one line per Read, so a prompt's buffered scanner never
-// swallows the answers meant for the next prompts.
+// swallows the answers meant for the next prompts. At end of input it panics with errEOF.
 type lineReader struct{}
 
 func (lineReader) Read(p []byte) (int, error) {
@@ -204,6 +218,9 @@ func (lineReader) Read(p []byte) (int, error) {
 	for n < len(p) {
 		m, err := os.Stdin.Read(p[n : n+1])
 		n += m
+		if err == io.EOF && n == 0 {
+			panic(errEOF)
+		}
 		if err != nil {
 			return n, err
 		}
