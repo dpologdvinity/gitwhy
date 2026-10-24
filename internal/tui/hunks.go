@@ -13,14 +13,17 @@ import (
 // hunkView is the Changes tab zoomed into one file's hunks.
 type hunkView struct {
 	path     string
-	staged   bool // showing the staged side (space unstages)
-	fd       *hunk.FileDiff
-	cur      int
-	lineMode bool
-	line     int    // cursor in fd.Hunks[cur].Lines (line mode)
-	sel      []bool // picked lines (line mode)
+	staged   bool           // showing the staged side (space unstages)
+	fd       *hunk.FileDiff // the file's diff on that side
+	cur      int            // selected hunk in fd.Hunks
+	lineMode bool           // picking single lines of hunk cur
+	line     int            // cursor in fd.Hunks[cur].Lines (line mode)
+	sel      []bool         // picked lines (line mode)
 }
 
+// openHunks zooms into path's hunks on the staged or unstaged side, keeping the selected hunk
+// when it reopens the same view. It returns an error, shown to the user, when there is nothing
+// to split into hunks.
 func (m *model) openHunks(path string, staged bool) error {
 	for _, f := range m.files {
 		// Limited to one path, git can't pair the rename, so the staged side would look like a whole new file.
@@ -52,6 +55,8 @@ func (m *model) openHunks(path string, staged bool) error {
 	return nil
 }
 
+// hunkKey handles a key press in the hunk view: move, stage or unstage a hunk, switch side,
+// or start picking lines.
 func (m *model) hunkKey(k string) (tea.Model, tea.Cmd) {
 	m.msg = ""
 	v := m.hunks
@@ -97,6 +102,8 @@ func (m *model) hunkKey(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// lineKey handles a key press in line mode: move between changed lines, pick them, and stage
+// (or unstage) the picked ones with enter.
 func (m *model) lineKey(k string) (tea.Model, tea.Cmd) {
 	v := m.hunks
 	switch k {
@@ -158,6 +165,7 @@ func (m *model) applyHunk(sel []bool) error {
 	return nil
 }
 
+// hunkTitle replaces the tab bar in the hunk view: the file and which side is shown.
 func (m *model) hunkTitle() string {
 	side := "unstaged changes"
 	if m.hunks.staged {
@@ -166,6 +174,7 @@ func (m *model) hunkTitle() string {
 	return bold.Render(m.hunks.path) + faint.Render(" — "+side)
 }
 
+// hunkKeys is the key hint line for the hunk view (after "space ").
 func (m *model) hunkKeys() string {
 	if m.hunks.lineMode {
 		return "pick line · enter stage picked lines · esc back"
@@ -177,6 +186,8 @@ func (m *model) hunkKeys() string {
 	return verb + " hunk · S staged/unstaged · v pick lines · esc back"
 }
 
+// hunkList draws the left pane of the hunk view: each hunk's header and its added and removed
+// line counts.
 func (m *model) hunkList(w, h int) []string {
 	var rows []string
 	for _, hk := range m.hunks.fd.Hunks {
@@ -186,6 +197,8 @@ func (m *model) hunkList(w, h int) []string {
 	return scroll(rows, m.hunks.cur, w, h)
 }
 
+// hunkDetail draws the right pane of the hunk view: the selected hunk, with a checkbox on each
+// changed line in line mode.
 func (m *model) hunkDetail(w, h int) []string {
 	v := m.hunks
 	lines := v.fd.Hunks[v.cur].Lines

@@ -7,6 +7,8 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// TestLoadAndSuggest proves that load reads the branch, commits, branches and file states, and
+// that the suggestions offer to commit staged files and publish the branch.
 func TestLoadAndSuggest(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -36,6 +38,8 @@ func TestLoadAndSuggest(t *testing.T) {
 	}
 }
 
+// TestConflictAndOperationShown proves that a merge in progress and its conflicted file are
+// shown, and enter on the file opens resolve-conflicts for it.
 func TestConflictAndOperationShown(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "base\n")
@@ -203,6 +207,8 @@ func TestCompareFromDetachedHead(t *testing.T) {
 	}
 }
 
+// TestCommitKeysPresetCommit proves that a commit key on the Commits tab presets the selected
+// commit's ID.
 func TestCommitKeysPresetCommit(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")

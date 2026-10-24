@@ -1,6 +1,7 @@
 // Package tui is gitwhy's full-screen home: where you are, what changed, and what you can do next.
-// It only reads the repo. Every change goes through a recipe (preview, explain, undo): the TUI
-// returns the chosen Action, the caller runs it, then reopens the TUI.
+// It only reads the repo, apart from staging and unstaging, which are always reversible. Every
+// other change goes through a recipe (preview, explain, undo): the TUI returns the chosen Action,
+// the caller runs it, then reopens the TUI.
 package tui
 
 import (
@@ -16,38 +17,50 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/recipe"
 )
 
-// Action is what the user picked.
+// Action is what the user picked, for the caller to carry out after the TUI closes.
 type Action struct {
-	Kind   string // "recipe", "search", "undo", "recover", "build", "quit"
-	Recipe string
-	Preset recipe.Answers
+	Kind   string         // "recipe", "search", "undo", "recover", "build", "quit"
+	Recipe string         // recipe ID, when Kind is "recipe"
+	Preset recipe.Answers // answers filled in from the selection, so the recipe does not ask them
 }
 
+// run returns an Action that runs recipe id with the preset answers.
 func run(id string, preset recipe.Answers) Action {
 	return Action{Kind: "recipe", Recipe: id, Preset: preset}
 }
 
+// The tabs, in the order shown; they index model.cursor and keys.
 const (
 	tabChanges = iota
 	tabCommits
 	tabBranches
 )
 
+// tabNames are the tab titles, indexed by tab.
 var tabNames = []string{"Changes", "Commits", "Branches"}
 
+// file is one changed path on the Changes tab.
 type file struct {
 	x, y  byte // porcelain status letters: index, work tree
 	path  string
 	moved bool // renamed or copied in the index
 }
 
+// conflict reports whether the file has a merge conflict (both sides changed it).
 func (f file) conflict() bool {
 	return f.x == 'U' || f.y == 'U' || (f.x == 'A' && f.y == 'A') || (f.x == 'D' && f.y == 'D')
 }
-func (f file) untracked() bool { return f.x == '?' }
-func (f file) staged() bool    { return f.x != ' ' && f.x != '?' && !f.conflict() }
-func (f file) unstaged() bool  { return f.y != ' ' && f.y != '?' && !f.conflict() }
 
+// untracked reports whether git does not track the file yet.
+func (f file) untracked() bool { return f.x == '?' }
+
+// staged reports whether the index has changes to the file.
+func (f file) staged() bool { return f.x != ' ' && f.x != '?' && !f.conflict() }
+
+// unstaged reports whether the work tree has changes to the file that are not staged.
+func (f file) unstaged() bool { return f.y != ' ' && f.y != '?' && !f.conflict() }
+
+// label is the short state word shown next to the file.
 func (f file) label() string {
 	switch {
 	case f.conflict():
@@ -62,31 +75,35 @@ func (f file) label() string {
 	return "changed"
 }
 
+// branch is one local or remote branch on the Branches tab.
 type branch struct {
+	// name is "main", or "origin/main" for a remote branch; track is ahead/behind its upstream
+	// ("[ahead 1]", "" if none); when and subject describe its last commit.
 	name, track, when, subject string
 	// switchTo is the name to give "git switch": the branch itself, or for a remote branch its
 	// name without the remote ("feat" for "origin/feat"), because git refuses a remote branch.
 	switchTo string
 }
 
+// model is the Bubble Tea model: what was read from the repo and where the user is.
 type model struct {
 	repo    *git.Repo
-	w, h    int
-	tab     int
-	cursor  [3]int
+	w, h    int    // terminal size
+	tab     int    // shown tab
+	cursor  [3]int // selected row on each tab
 	files   []file
 	rows    []graph.Row // Commits tab; the cursor counts commit rows only
 	all     bool        // Commits tab shows every branch
 	brs     []branch
-	head    string // branch name or "HEAD (detached)", for display
-	headRef string // what git reads: the branch name, or "HEAD" when detached
-	ab      string // "↑2 ↓1" vs upstream
-	up      string
-	op      string
-	help    bool
-	msg     string // one-line result of the last quick action
-	detail  string
-	action  Action
+	head    string    // branch name or "HEAD (detached)", for display
+	headRef string    // what git reads: the branch name, or "HEAD" when detached
+	ab      string    // "↑2 ↓1" vs upstream
+	up      string    // upstream branch, e.g. "origin/main"; "" if none
+	op      string    // operation in progress ("merge", "rebase", ...); "" if none
+	help    bool      // show every key for the tab
+	msg     string    // one-line result of the last quick action
+	detail  string    // right pane: diff or log for the selection
+	action  Action    // what Run returns when the program quits
 	hunks   *hunkView // non-nil while zoomed into a file's hunks
 }
 
@@ -101,6 +118,8 @@ func Run(repo *git.Repo) (Action, error) {
 	return final.(*model).action, nil
 }
 
+// load reads the repo state into the model (status, branches, and the graph when its tab is
+// shown) and keeps each tab's cursor on the same item where it can.
 func (m *model) load() {
 	r := m.repo
 	// Both lists can reorder on reload: remember the selected file and branch by name.
@@ -128,6 +147,7 @@ func (m *model) load() {
 				m.ab = fmt.Sprintf("↑%d ↓%d", a, b)
 			}
 		case strings.HasPrefix(e, "1 ") || strings.HasPrefix(e, "u "):
+			// Split only up to the path field, so a path with spaces stays whole.
 			f := strings.SplitN(e, " ", 9)
 			if e[0] == 'u' {
 				f = strings.SplitN(e, " ", 11)
@@ -184,6 +204,7 @@ func (m *model) load() {
 	m.loadDetail()
 }
 
+// count returns how many selectable rows a tab has.
 func (m *model) count(tab int) int {
 	switch tab {
 	case tabChanges:
@@ -213,6 +234,8 @@ func (m *model) commitAt(i int) *graph.Commit {
 	return nil
 }
 
+// loadDetail fills the right pane for the selection: a file's diff, a commit's stat, or the
+// commits only on one side of a branch and HEAD.
 func (m *model) loadDetail() {
 	r := m.repo
 	m.detail = ""
@@ -253,6 +276,7 @@ func dot(b byte) byte {
 	return b
 }
 
+// orNone indents a log for the right pane, or says "(nothing)" when it is empty.
 func orNone(s string) string {
 	if s == "" {
 		return "  (nothing)"
@@ -298,8 +322,10 @@ func (m *model) suggest() []string {
 	return s
 }
 
+// Init is part of tea.Model; the model is loaded before the program starts, so it does nothing.
 func (m *model) Init() tea.Cmd { return nil }
 
+// Update is part of tea.Model: it tracks the window size and handles key presses.
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -311,11 +337,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// pick records the chosen Action and quits, so Run returns it.
 func (m *model) pick(a Action) (tea.Model, tea.Cmd) {
 	m.action = a
 	return m, tea.Quit
 }
 
+// key handles one key press (in bubbletea's spelling, e.g. "space", "ctrl+r"): keys for every
+// tab here, keys for the selected item in tabKey, and hunk keys while zoomed into a file.
 func (m *model) key(k string) (tea.Model, tea.Cmd) {
 	if m.hunks != nil {
 		return m.hunkKey(k)
@@ -324,7 +353,7 @@ func (m *model) key(k string) (tea.Model, tea.Cmd) {
 	i := m.cursor[m.tab]
 	n := m.count(m.tab)
 	was := m.tab
-	defer func() {
+	defer func() { // the graph is only loaded on its tab, so entering or leaving it reloads
 		if m.tab != was && (m.tab == tabCommits || was == tabCommits) {
 			m.load()
 		}
@@ -390,7 +419,8 @@ func (m *model) key(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// tabKey handles keys that act on the selected item.
+// tabKey handles keys that act on the selected item (row i of the shown tab). It returns the
+// Action to run and true, or false when the key was handled in place or does nothing here.
 func (m *model) tabKey(k string, i int) (Action, bool) {
 	switch m.tab {
 	case tabChanges:
@@ -526,6 +556,7 @@ func (m *model) quick(args ...string) {
 	m.load()
 }
 
+// Styles. tagCol colors each file label from file.label.
 var (
 	bold    = lipgloss.NewStyle().Bold(true)
 	faint   = lipgloss.NewStyle().Faint(true)
@@ -544,12 +575,14 @@ var (
 	}
 )
 
+// keys is the help text for each tab's item keys, indexed by tab.
 var keys = [][]string{
 	{"space stage/unstage", "a stage all", "c commit", "d discard", "s stash", "H history", "enter hunks / resolve conflict"},
 	{"r reword", "d drop", "f add changes to it", "s split", "x revert", "e reorder/squash", "m move to new branch", "b branch from", "o reset branch here", "t tag", "p copy here", "a all branches"},
 	{"enter switch", "m merge into current", "b rebase onto", "n new branch from", "c compare", "D delete"},
 }
 
+// View is part of tea.Model: the whole screen, drawn in the terminal's alternate screen.
 func (m *model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
@@ -557,6 +590,8 @@ func (m *model) View() tea.View {
 	return v
 }
 
+// render draws the screen: the header and tabs, the list and detail panes side by side, then
+// the message, suggestions and key hints.
 func (m *model) render() string {
 	w, h := max(m.w, 60), max(m.h, 15)
 	var top strings.Builder
@@ -629,6 +664,7 @@ func (m *model) render() string {
 	return strings.Join(lines, "\n")
 }
 
+// list draws the left pane for the shown tab, at most h rows of width w.
 func (m *model) list(w, h int) []string {
 	var rows []string
 	switch m.tab {
@@ -690,6 +726,7 @@ func scroll(rows []string, cur, w, h int) []string {
 	return out
 }
 
+// colorDiff colors diff text by line type and cuts it to h lines of width w.
 func colorDiff(text string, w, h int) []string {
 	var out []string
 	for _, l := range strings.Split(text, "\n") {
@@ -725,8 +762,10 @@ func graphArt(g string) string {
 	return b.String()
 }
 
+// trunc cuts s to w columns, ending in "…" when cut; color codes do not count.
 func trunc(s string, w int) string { return ansi.Truncate(s, w, "…") }
 
+// pad fills s with spaces to w columns.
 func pad(s string, w int) string {
 	if n := lipgloss.Width(s); n < w {
 		return s + strings.Repeat(" ", w-n)
