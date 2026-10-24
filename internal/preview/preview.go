@@ -31,7 +31,7 @@ func (r *Result) add(format string, a ...any) { r.Lines = append(r.Lines, fmt.Sp
 // git will expand its globs, so the preview must too.
 func withGlobs(repo *git.Repo) *git.Repo {
 	c := *repo
-	c.Runner = c.Runner.With("GIT_LITERAL_PATHSPECS=0")
+	c.Runner = c.With("GIT_LITERAL_PATHSPECS=0")
 	return &c
 }
 
