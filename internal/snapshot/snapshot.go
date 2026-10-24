@@ -341,9 +341,10 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 	}
 	res.Before = cur
 
-	// 1. Refs: one transaction, so a failure here changes nothing.
+	// 1. Refs: deletes, then updates, each one transaction. If the updates fail, the deleted refs
+	// are put back, so a failure here changes nothing.
 	elsewhere := checkedOutElsewhere(r)
-	var tx strings.Builder
+	var dels, ups, undel strings.Builder
 	names := map[string]bool{}
 	for n := range s.Refs {
 		names[n] = true
@@ -377,16 +378,25 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 			res.Skipped = append(res.Skipped, short+" can't go back: its old commits are gone")
 			continue
 		}
-		if had {
-			fmt.Fprintf(&tx, "update %s %s\n", name, want)
-		} else {
-			fmt.Fprintf(&tx, "delete %s\n", name)
+		switch {
+		case !had:
+			// Deleted first, in its own transaction: "foo" can't be written while "foo/bar" exists.
+			fmt.Fprintf(&dels, "delete %s %s\n", name, now)
+			fmt.Fprintf(&undel, "create %s %s\n", name, now)
+		case has:
+			fmt.Fprintf(&ups, "update %s %s %s\n", name, want, now) // update keeps the reflog
+		default:
+			fmt.Fprintf(&ups, "create %s %s\n", name, want)
 		}
 	}
-	if tx.Len() > 0 {
-		if _, err := r.OutputIn(strings.NewReader(tx.String()), "update-ref", "--no-deref", "--stdin"); err != nil {
-			return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
+	if err := updateRefs(r, dels.String()); err != nil {
+		return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
+	}
+	if err := updateRefs(r, ups.String()); err != nil {
+		if uerr := updateRefs(r, undel.String()); uerr != nil {
+			return res, fmt.Errorf("restoring branches failed and some branches were deleted: %w", errors.Join(err, uerr))
 		}
+		return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
 	}
 
 	// 2. HEAD.
@@ -468,6 +478,15 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 	}
 	prune(r, cur.ID)
 	return res, nil
+}
+
+// updateRefs runs one all-or-nothing "git update-ref --stdin" transaction, if tx isn't empty.
+func updateRefs(r *git.Repo, tx string) error {
+	if tx == "" {
+		return nil
+	}
+	_, err := r.OutputIn(strings.NewReader(tx), "update-ref", "--no-deref", "--stdin")
+	return err
 }
 
 func shortRef(name string) string {

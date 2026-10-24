@@ -434,6 +434,51 @@ func TestTagsAndRemoteRefsSurviveGC(t *testing.T) {
 	}
 }
 
+// TestUndoRenameIntoOwnFolder proves undo of "git branch -m foo foo/bar" works: the ref
+// foo/bar must be deleted before foo can be written back.
+func TestUndoRenameIntoOwnFolder(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Git("branch", "foo")
+	s, err := Take(r.Repo, "git branch -m foo foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("branch", "-m", "foo", "foo/bar")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Restore(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("for-each-ref", "--format=%(refname)", "refs/heads/"); got != "refs/heads/foo\nrefs/heads/main" {
+		t.Fatalf("branches = %q", got)
+	}
+}
+
+// TestFailedRefUpdatePutsDeletedRefsBack proves that when writing refs back fails after the
+// first transaction deleted some, those refs are put back, so the error's "nothing was changed"
+// stays true.
+func TestFailedRefUpdatePutsDeletedRefsBack(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Git("branch", "foo/bar")
+	s, err := Take(r.Repo, "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("branch", "-D", "foo/bar")
+	r.Git("branch", "extra")
+	// foo is checked out in another worktree, so it is left alone and foo/bar can't come back.
+	r.Git("worktree", "add", "-q", "-b", "foo", filepath.Join(t.TempDir(), "wt"))
+	if _, err := Restore(r.Repo, s); err == nil || !strings.Contains(err.Error(), "nothing was changed") {
+		t.Fatalf("err = %v", err)
+	}
+	if !r.OK("rev-parse", "--verify", "-q", "refs/heads/extra") {
+		t.Fatal("extra was deleted")
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()
