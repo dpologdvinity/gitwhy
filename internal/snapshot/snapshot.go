@@ -65,6 +65,8 @@ type Snapshot struct {
 
 	// Refs right after the command ran (see Finish). Undo only reverts refs still at these values.
 	After map[string]string `json:"after,omitempty"`
+	// Stash list right after the command ran (see Finish). Undo keeps stashes made after that.
+	StashesAfter []Stash `json:"stashesAfter,omitempty"`
 
 	dir string
 }
@@ -208,6 +210,9 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 func Finish(r *git.Repo, s *Snapshot) error {
 	after, err := refs(r)
 	if err != nil {
+		return err
+	}
+	if s.StashesAfter, err = stashes(r); err != nil {
 		return err
 	}
 	s.After = after
@@ -418,11 +423,24 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 		return res, err
 	}
 
-	// 6. Stash list.
-	if !sameStashes(s.Stashes, cur.Stashes) {
+	// 6. Stash list. Stashes made after the command ran stay on top of the restored list.
+	var later []Stash
+	if s.After != nil {
+		known := map[string]bool{}
+		for _, st := range append(append([]Stash{}, s.Stashes...), s.StashesAfter...) {
+			known[st.Commit] = true
+		}
+		for _, st := range cur.Stashes {
+			if !known[st.Commit] {
+				later = append(later, st)
+				res.Skipped = append(res.Skipped, "a stash made after this action ("+st.Message+") was kept")
+			}
+		}
+	}
+	if want := append(append([]Stash{}, later...), s.Stashes...); !sameStashes(want, cur.Stashes) {
 		r.Output("update-ref", "-d", "refs/stash")
-		for i := len(s.Stashes) - 1; i >= 0; i-- {
-			st := s.Stashes[i]
+		for i := len(want) - 1; i >= 0; i-- {
+			st := want[i]
 			if missing[st.Commit] {
 				res.Skipped = append(res.Skipped, "a stash ("+st.Message+") can't come back: it's gone")
 				continue

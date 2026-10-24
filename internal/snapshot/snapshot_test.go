@@ -576,6 +576,37 @@ func TestHeadBranchInOtherWorktreeIsNotCheckedOut(t *testing.T) {
 	}
 }
 
+// TestStashMadeLaterIsKept proves undo keeps a stash made after the action, while a stash the
+// action itself made is still undone.
+func TestStashMadeLaterIsKept(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Write("a.txt", "action wip\n")
+	s, err := Take(r.Repo, "git stash", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Git("stash", "push", "-q", "-m", "made by the action")
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	r.Write("a.txt", "later wip\n")
+	r.Git("stash", "push", "-q", "-m", "my later wip")
+	res, err := Restore(r.Repo, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Git("stash", "list", "--format=%gs"); got != "On main: my later wip" {
+		t.Errorf("stash list = %q", got)
+	}
+	if r.Read("a.txt") != "action wip\n" {
+		t.Errorf("a.txt = %q", r.Read("a.txt"))
+	}
+	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "my later wip") {
+		t.Errorf("skipped = %q", res.Skipped)
+	}
+}
+
 // manyBranches makes n branches, each on its own commit, with one fast-import process.
 func manyBranches(t *testing.T, r *testrepo.Repo, n int) {
 	t.Helper()
