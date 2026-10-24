@@ -54,9 +54,6 @@ Undo last commit (keep staged / unstaged / delete) · undo a pushed commit safel
 
 Needs git 2.38+. Tested on Linux, WSL and Windows (CI); macOS builds but is untested.
 
-> **Not live yet:** apt, dnf, npm and Scoop arrive with the next release (v0.8.1). Until then use the
-> curl or PowerShell installer, Homebrew, Nix, or a release file.
-
 ### Linux and macOS
 
 ```sh
