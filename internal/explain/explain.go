@@ -1,4 +1,8 @@
 // Package explain breaks a git command line into parts with a plain-English meaning for each.
+//
+// Flag meanings come from the embedded command docs (package kb). Positional arguments are
+// described by Revision, which recognises special names, ranges and revision suffixes, and asks
+// the repository whether a word is a branch, tag, remote, commit or tracked file.
 package explain
 
 import (
@@ -9,20 +13,23 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/kb"
 )
 
-// Part is one token and what it means.
+// Part is one token of the command line and what it means.
 type Part struct {
-	Token   string
-	Meaning string
+	Token   string // the word as typed; for "bisect run" the whole test command
+	Meaning string // plain-English meaning
 }
 
+// Patterns Revision uses to recognise revision syntax.
 var (
-	shaRe    = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
-	tildeRe  = regexp.MustCompile(`^(.*?)~(\d*)$`)
-	caretRe  = regexp.MustCompile(`^(.*?)\^(\d*)$`)
-	reflogRe = regexp.MustCompile(`^(.*?)@\{(.+)\}$`)
+	shaRe    = regexp.MustCompile(`^[0-9a-f]{7,64}$`) // a full or abbreviated commit ID (SHA-1 or SHA-256)
+	tildeRe  = regexp.MustCompile(`^(.*?)~(\d*)$`)    // "<rev>~<n>": n first-parent steps back (default 1)
+	caretRe  = regexp.MustCompile(`^(.*?)\^(\d*)$`)   // "<rev>^<n>": the n-th parent (default 1)
+	reflogRe = regexp.MustCompile(`^(.*?)@\{(.+)\}$`) // "<ref>@{...}": reflog entry, upstream, push or stash
 )
 
-// Explain describes each part of args (without the leading "git"). repo may be nil.
+// Explain describes each part of args (without the leading "git"). repo may be nil; then
+// positional arguments are described from their syntax alone. An unknown command gives a single
+// part, and flags missing from the docs are still listed, with a pointer to git's help.
 func Explain(k *kb.KB, repo *git.Repo, args []string) []Part {
 	if len(args) == 0 {
 		return nil
@@ -36,6 +43,7 @@ func Explain(k *kb.KB, repo *git.Repo, args []string) []Part {
 	parts = append(parts, Part{cmd, firstSentence(c.Summary)})
 	rest := args[1:]
 	sub := ""
+	// A documented subcommand, such as "pop" in "stash pop", has its own flags in the docs.
 	if len(rest) > 0 && c.Sub(rest[0]) != nil {
 		sub = rest[0]
 		parts = append(parts, Part{sub, firstSentence(c.Sub(sub).Summary)})
@@ -44,6 +52,7 @@ func Explain(k *kb.KB, repo *git.Repo, args []string) []Part {
 	afterDash := false
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
+		// Everything after "bisect run" is the user's own test command, not git flags.
 		if cmd == "bisect" && sub == "run" {
 			parts = append(parts, Part{strings.Join(rest[i:], " "), "the test command git runs on each commit (exit 0 = good)"})
 			break
@@ -70,7 +79,8 @@ func Explain(k *kb.KB, repo *git.Repo, args []string) []Part {
 				}
 				continue
 			}
-			// Combined short flags: "-fdx".
+			// Combined short flags: "-fdx". Only used when every letter is a documented flag;
+			// otherwise the whole word is shown as one unknown option.
 			if !strings.HasPrefix(tok, "--") && len(tok) > 2 {
 				all := true
 				var sub2 []Part
@@ -102,7 +112,9 @@ func takesSeparateValue(f kb.Flag, tok string) bool {
 	return !strings.HasPrefix(tok, "--") || strings.Contains(f.Display, tok+" ") || strings.Contains(f.Display, tok+"=")
 }
 
-// Revision explains a positional argument: a revision, range, remote or path.
+// Revision explains a positional argument: a revision, range, remote or path. Syntax is checked
+// first ("a...b" before "a..b", then "@{...}", "~" and "^", recursing on the base). If repo is not
+// nil, git is then asked what the word names; otherwise a generic description is returned.
 func Revision(repo *git.Repo, tok string) string {
 	switch tok {
 	case "HEAD", "@":
@@ -150,6 +162,8 @@ func Revision(repo *git.Repo, tok string) string {
 		}
 		return "parent number " + m[2] + " of " + Revision(repo, m[1]) + " (a merge commit)"
 	}
+	// Order matters when one name is several things: a local branch wins over a remote branch,
+	// tag, remote, commit ID or file.
 	if repo != nil {
 		switch {
 		case repo.OK("show-ref", "--verify", "-q", "refs/heads/"+tok):
@@ -163,6 +177,7 @@ func Revision(repo *git.Repo, tok string) string {
 		case shaRe.MatchString(tok) && repo.OK("cat-file", "-e", tok+"^{commit}"):
 			return "commit " + tok
 		}
+		// --error-unmatch makes ls-files fail when tok matches no tracked file.
 		if _, err := repo.Output("ls-files", "--error-unmatch", "--", tok); err == nil {
 			return "file " + tok
 		}
@@ -173,6 +188,7 @@ func Revision(repo *git.Repo, tok string) string {
 	return "a branch, tag, commit, remote or path"
 }
 
+// orHEAD returns s, or "HEAD" when s is empty, since git reads a missing side of a range as HEAD.
 func orHEAD(s string) string {
 	if s == "" {
 		return "HEAD"
@@ -180,6 +196,7 @@ func orHEAD(s string) string {
 	return s
 }
 
+// orBranch returns s, or "the current branch" when s is empty, as in "@{u}".
 func orBranch(s string) string {
 	if s == "" {
 		return "the current branch"
@@ -187,6 +204,7 @@ func orBranch(s string) string {
 	return s
 }
 
+// firstSentence returns s up to and including the first ". ", or all of s if there is none.
 func firstSentence(s string) string {
 	if i := strings.Index(s, ". "); i > 0 {
 		return s[:i+1]

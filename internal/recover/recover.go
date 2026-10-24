@@ -3,7 +3,9 @@
 package recover
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,11 +40,13 @@ func (e Event) Undo(repo *git.Repo) []string {
 	return []string{"branch", "-f", strings.TrimPrefix(e.Ref, "refs/heads/"), e.Before}
 }
 
+// entry is one reflog line: the commit the ref moved to, the reflog message and when.
 type entry struct {
 	id, msg string
 	t       time.Time
 }
 
+// reflog reads the newest n reflog entries of ref, newest first.
 func reflog(repo *git.Repo, ref string, n int) ([]entry, error) {
 	out, err := repo.Output("log", "-g", "-n", strconv.Itoa(n), "--format=%H%x00%gs%x00%gt", ref, "--")
 	if err != nil {
@@ -99,6 +103,7 @@ func Events(repo *git.Repo, n int) ([]Event, error) {
 	return out, nil
 }
 
+// count returns how many non-merge commits are in the revision range rng, or 0 on error.
 func count(repo *git.Repo, rng string) int {
 	out, err := repo.Output("rev-list", "--count", "--no-merges", rng, "--")
 	if err != nil {
@@ -108,6 +113,7 @@ func count(repo *git.Repo, rng string) int {
 	return n
 }
 
+// describe sets e.Kind and e.Text from the reflog message in e.Raw.
 func describe(repo *git.Repo, e *Event) {
 	action, detail, _ := strings.Cut(e.Raw, ": ")
 	action = strings.TrimSpace(action)
@@ -173,7 +179,7 @@ func LostObjects(repo *git.Repo, max int) ([]Lost, error) {
 	if err != nil && out == "" {
 		return nil, err
 	}
-	var commits, blobs []Lost
+	var commitIDs, blobIDs []string
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
 		if len(f) != 3 || f[0] != "dangling" {
@@ -181,31 +187,86 @@ func LostObjects(repo *git.Repo, max int) ([]Lost, error) {
 		}
 		switch f[1] {
 		case "commit":
-			info, err := repo.Output("log", "-1", "--format=%s%x00%ct", f[2])
-			if err != nil {
-				continue
-			}
-			subj, ts, _ := strings.Cut(info, "\x00")
-			if strings.HasPrefix(subj, "gitwhy ") { // our own snapshots and previews
-				continue
-			}
-			sec, _ := strconv.ParseInt(ts, 10, 64)
-			commits = append(commits, Lost{ID: f[2], Kind: "commit", Title: subj, Time: time.Unix(sec, 0)})
+			commitIDs = append(commitIDs, f[2])
 		case "blob":
-			head, _ := repo.Output("cat-file", "-p", f[2])
-			first, _, _ := strings.Cut(head, "\n")
+			blobIDs = append(blobIDs, f[2])
+		}
+	}
+	commits, err := lostCommits(repo, commitIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(commits) >= max {
+		return commits[:max], nil
+	}
+	blobs, err := lostBlobs(repo, blobIDs[:min(len(blobIDs), max-len(commits))])
+	return append(commits, blobs...), err
+}
+
+// lostCommits describes dangling commits, newest first, with one git process. gitwhy's own
+// snapshot and preview commits are left out.
+func lostCommits(repo *git.Repo, ids []string) ([]Lost, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	in := strings.NewReader(strings.Join(ids, "\n") + "\n")
+	out, err := repo.OutputIn(in, "log", "--no-walk=unsorted", "--stdin", "--format=%H%x00%s%x00%ct")
+	if err != nil {
+		return nil, err
+	}
+	var commits []Lost
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Split(line, "\x00")
+		if len(f) != 3 || strings.HasPrefix(f[1], "gitwhy ") {
+			continue
+		}
+		sec, _ := strconv.ParseInt(f[2], 10, 64)
+		commits = append(commits, Lost{ID: f[0], Kind: "commit", Title: f[1], Time: time.Unix(sec, 0)})
+	}
+	sort.Slice(commits, func(i, j int) bool { return commits[i].Time.After(commits[j].Time) })
+	return commits, nil
+}
+
+// titleBytes is how much of a blob is read for its title: a short first line is all we show.
+const titleBytes = 256
+
+// lostBlobs describes dangling blobs by their first line, with one git process. Only the first
+// titleBytes of each blob are kept, so a huge file doesn't fill memory.
+func lostBlobs(repo *git.Repo, ids []string) ([]Lost, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var blobs []Lost
+	read := func(stdout io.Reader) error {
+		br := bufio.NewReader(stdout)
+		for range ids {
+			header, err := br.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			id, size, ok := strings.Cut(strings.TrimSuffix(header, "\n"), " ")
+			n, err := strconv.ParseInt(size, 10, 64)
+			if !ok || err != nil {
+				continue // "<id> missing": no content follows
+			}
+			head := make([]byte, min(n, titleBytes))
+			if _, err := io.ReadFull(br, head); err != nil {
+				return err
+			}
+			if _, err := br.Discard(int(n-int64(len(head))) + 1); err != nil { // the rest and "\n"
+				return err
+			}
+			first, _, _ := strings.Cut(string(head), "\n")
 			if len(first) > 70 {
 				first = first[:70] + "..."
 			}
-			blobs = append(blobs, Lost{ID: f[2], Kind: "blob", Title: first})
+			blobs = append(blobs, Lost{ID: id, Kind: "blob", Title: first})
 		}
+		return nil
 	}
-	sort.Slice(commits, func(i, j int) bool { return commits[i].Time.After(commits[j].Time) })
-	all := append(commits, blobs...)
-	if len(all) > max {
-		all = all[:max]
-	}
-	return all, nil
+	in := strings.NewReader(strings.Join(ids, "\n") + "\n")
+	err := repo.Stream(in, read, "cat-file", "--batch=%(objectname) %(objectsize)")
+	return blobs, err
 }
 
 // Ago formats a time as "5m ago".

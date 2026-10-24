@@ -3,8 +3,10 @@
 // A snapshot holds every ref and HEAD, a byte copy of the index, a commit of the whole working
 // tree (tracked + untracked, not ignored), the state files of an in-progress merge/rebase/etc.,
 // sparse-checkout settings, and the stash list. It lives in <gitdir>/gitwhy/snapshots/<id>/. The
-// working-tree commit, whose parents are every local branch tip, HEAD and stash entry, is kept
-// alive by refs/gitwhy/snapshots/<id>, so gc can't delete what undo needs.
+// working-tree commit is kept alive by refs/gitwhy/snapshots/<id>. Its parents are every commit
+// HEAD, a ref (branches, tags, remote-tracking branches) or a stash entry points to, with tags
+// peeled to their commit. Other objects refs point to, such as annotated tag objects, are kept
+// alive by refs/gitwhy/snapshots/<id>-<object ID>. So gc can't delete what undo needs.
 package snapshot
 
 import (
@@ -13,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -25,6 +28,8 @@ import (
 // Keep is how many snapshots are kept per worktree.
 const Keep = 20
 
+// refPrefix starts the refs that keep each snapshot's objects alive. The refs are shared by
+// every worktree; the snapshot folders are not.
 const refPrefix = "refs/gitwhy/snapshots/"
 
 // stateFiles are the per-worktree files that describe an operation in progress.
@@ -44,18 +49,18 @@ var sparseKeys = []string{"core.sparseCheckout", "core.sparseCheckoutCone", "ind
 // Stash is one stash entry.
 type Stash struct {
 	Commit  string `json:"commit"`
-	Message string `json:"message"`
+	Message string `json:"message"` // the reflog subject, e.g. "On main: my wip"
 }
 
 // Snapshot describes one saved state.
 type Snapshot struct {
-	ID      string            `json:"id"`
+	ID      string            `json:"id"` // base-36 creation time in nanoseconds; also the folder name
 	Time    time.Time         `json:"time"`
-	Label   string            `json:"label"` // what was about to run, e.g. "git reset --hard HEAD~1"
-	Head    string            `json:"head"`  // "ref: refs/heads/x" or a commit ID
-	Refs    map[string]string `json:"refs"`  // refname -> object ID (no symrefs, refs/gitwhy, refs/stash)
-	Work    string            `json:"work"`  // commit of the working tree
-	Stashes []Stash           `json:"stashes"`
+	Label   string            `json:"label"`    // what was about to run, e.g. "git reset --hard HEAD~1"
+	Head    string            `json:"head"`     // "ref: refs/heads/x" or a commit ID
+	Refs    map[string]string `json:"refs"`     // refname -> object ID (no symrefs, refs/gitwhy, refs/stash)
+	Work    string            `json:"work"`     // commit of the working tree
+	Stashes []Stash           `json:"stashes"`  // newest first
 	State   []string          `json:"state"`    // state files that existed
 	HasIdx  bool              `json:"hasIndex"` // whether .git/index existed
 	Sparse  map[string]string `json:"sparse"`   // sparse config key -> value ("" = unset)
@@ -63,10 +68,13 @@ type Snapshot struct {
 
 	// Refs right after the command ran (see Finish). Undo only reverts refs still at these values.
 	After map[string]string `json:"after,omitempty"`
+	// Stash list right after the command ran (see Finish). Undo keeps stashes made after that.
+	StashesAfter []Stash `json:"stashesAfter,omitempty"`
 
-	dir string
+	dir string // the snapshot's folder
 }
 
+// root returns the folder holding this worktree's snapshots.
 func root(r *git.Repo) string { return filepath.Join(r.GitDir, "gitwhy", "snapshots") }
 
 // Take saves the current state. extra lists ignored paths to include because the next command
@@ -79,6 +87,8 @@ func Take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	return s, err
 }
 
+// take saves the current state like Take, without pruning old snapshots. If it fails, the
+// snapshot's folder is removed.
 func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	if _, err := os.Stat(filepath.Join(r.GitDir, "index.lock")); err == nil {
 		return nil, errors.New("another git process is running (.git/index.lock exists)")
@@ -124,7 +134,7 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 		}
 	}
 	w := r.With("GIT_INDEX_FILE=" + tmpIdx)
-	if _, err := w.Output("add", "-A", "--ignore-errors", "--", ":/"); err != nil {
+	if _, err := w.Output("add", "-A", "--ignore-errors"); err != nil { // no pathspec: the whole tree
 		return nil, fmt.Errorf("saving working files: %w", err)
 	}
 	if len(extra) > 0 {
@@ -139,17 +149,13 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	}
 	os.Remove(tmpIdx)
 
-	// Parents pin every local branch tip, HEAD and stash commit, so gc can't delete them.
+	// Keep alive everything HEAD, the refs and the stash point to, so gc can't delete it: commits
+	// (and the commits tags point to) become parents of the working-tree commit, and other
+	// objects, such as annotated tags, get a ref of their own.
 	args := []string{"commit-tree", tree, "-m", "gitwhy snapshot: " + label}
-	seen := map[string]bool{}
-	pin := func(id string) {
-		if id != "" && !seen[id] && r.OK("cat-file", "-e", id+"^{commit}") {
-			seen[id] = true
-			args = append(args, "-p", id)
-		}
-	}
+	var ids []string
 	if !strings.HasPrefix(s.Head, "ref: ") {
-		pin(s.Head)
+		ids = append(ids, s.Head)
 	}
 	names := make([]string, 0, len(s.Refs))
 	for n := range s.Refs {
@@ -157,18 +163,25 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if strings.HasPrefix(n, "refs/heads/") {
-			pin(s.Refs[n])
-		}
+		ids = append(ids, s.Refs[n])
 	}
 	for _, st := range s.Stashes {
-		pin(st.Commit)
+		ids = append(ids, st.Commit)
+	}
+	commits, others := pins(r, ids)
+	for _, id := range commits {
+		args = append(args, "-p", id)
 	}
 	s.Work, err = r.With(commitEnv...).Output(args...)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.Output("update-ref", refPrefix+s.ID, s.Work); err != nil {
+	var tx strings.Builder
+	fmt.Fprintf(&tx, "update %s %s\n", refPrefix+s.ID, s.Work)
+	for _, id := range others {
+		fmt.Fprintf(&tx, "update %s-%s %s\n", refPrefix+s.ID, id, id)
+	}
+	if _, err := r.OutputIn(strings.NewReader(tx.String()), "update-ref", "--stdin"); err != nil {
 		return nil, err
 	}
 
@@ -187,8 +200,11 @@ func take(r *git.Repo, label string, extra []string) (*Snapshot, error) {
 			s.Files = append(s.Files, f)
 		}
 	}
+	// Only the shared config file: config.worktree is copied above, and writing the effective
+	// value back to the shared file would turn sparse checkout on in every worktree.
+	shared := filepath.Join(r.Common, "config")
 	for _, k := range sparseKeys {
-		s.Sparse[k], _ = r.Output("config", "--get", k)
+		s.Sparse[k], _ = r.Output("config", "--file", shared, "--get", k)
 	}
 
 	if err := s.save(); err != nil {
@@ -205,6 +221,9 @@ func Finish(r *git.Repo, s *Snapshot) error {
 	if err != nil {
 		return err
 	}
+	if s.StashesAfter, err = stashes(r); err != nil {
+		return err
+	}
 	s.After = after
 	return s.save()
 }
@@ -215,6 +234,7 @@ var commitEnv = []string{
 	"GIT_COMMITTER_NAME=gitwhy", "GIT_COMMITTER_EMAIL=gitwhy@localhost",
 }
 
+// save writes meta.json through a temporary file, so a crash never leaves half a file.
 func (s *Snapshot) save() error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -254,6 +274,7 @@ func Get(r *git.Repo, id string) (*Snapshot, error) {
 	return read(filepath.Join(root(r), id))
 }
 
+// read loads the snapshot saved in dir.
 func read(dir string) (*Snapshot, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	if err != nil {
@@ -267,12 +288,30 @@ func read(dir string) (*Snapshot, error) {
 	return &s, nil
 }
 
-// Delete removes a snapshot and its ref.
+// Delete removes a snapshot and the refs that keep its objects alive.
 func Delete(r *git.Repo, s *Snapshot) {
-	r.Output("update-ref", "-d", refPrefix+s.ID)
+	// Best effort: refs left behind lose their folder here, so the next prune deletes them.
+	_ = deleteRefs(r, s.ID)
 	os.RemoveAll(s.dir)
 }
 
+// deleteRefs removes refs/gitwhy/snapshots/<id> and the extra refs Take made for that ID.
+func deleteRefs(r *git.Repo, id string) error {
+	out, err := r.Output("for-each-ref", "--format=%(refname)", refPrefix)
+	if err != nil {
+		return err
+	}
+	var tx strings.Builder
+	for _, name := range strings.Split(out, "\n") {
+		if name == refPrefix+id || strings.HasPrefix(name, refPrefix+id+"-") {
+			fmt.Fprintf(&tx, "delete %s\n", name)
+		}
+	}
+	return updateRefs(r, tx.String())
+}
+
+// prune deletes all but the newest Keep snapshots, never the one with ID keep, then removes
+// orphans (see pruneOrphans).
 func prune(r *git.Repo, keep string) {
 	all, err := List(r)
 	if err != nil {
@@ -287,17 +326,73 @@ func prune(r *git.Repo, keep string) {
 			Delete(r, s)
 		}
 	}
+	pruneOrphans(r)
 }
 
-// Result of a restore.
+// staleAfter is how old a snapshot folder without meta.json must be before prune treats it as
+// left over from an interrupted Take rather than one still being written.
+const staleAfter = 10 * time.Minute
+
+// pruneOrphans removes what an interrupted Take or a removed worktree leaves behind: this
+// worktree's old snapshot folders without meta.json, and snapshot refs whose folder exists in no
+// worktree (refs are shared by all worktrees, folders are not).
+func pruneOrphans(r *git.Repo) {
+	entries, _ := os.ReadDir(root(r))
+	for _, e := range entries {
+		dir := filepath.Join(root(r), e.Name())
+		if _, err := os.Lstat(filepath.Join(dir, "meta.json")); !errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > staleAfter {
+			os.RemoveAll(dir)
+		}
+	}
+
+	// Every worktree's git dir: the main one and <common>/worktrees/<name>. If any can't be
+	// read, keep every ref rather than risk deleting one still in use.
+	gitDirs := []string{r.Common, r.GitDir}
+	wts, err := os.ReadDir(filepath.Join(r.Common, "worktrees"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	for _, w := range wts {
+		gitDirs = append(gitDirs, filepath.Join(r.Common, "worktrees", w.Name()))
+	}
+	ids := map[string]bool{}
+	for _, g := range gitDirs {
+		es, err := os.ReadDir(filepath.Join(g, "gitwhy", "snapshots"))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		for _, e := range es {
+			ids[e.Name()] = true
+		}
+	}
+	out, err := r.Output("for-each-ref", "--format=%(refname)", refPrefix)
+	if err != nil {
+		return
+	}
+	var tx strings.Builder
+	for _, name := range strings.Split(out, "\n") {
+		id, _, _ := strings.Cut(strings.TrimPrefix(name, refPrefix), "-")
+		if name != "" && !ids[id] {
+			fmt.Fprintf(&tx, "delete %s\n", name)
+		}
+	}
+	_ = updateRefs(r, tx.String()) // best effort: the next prune tries again
+}
+
+// Result is what a restore did.
 type Result struct {
 	Before  *Snapshot // the state just before the restore (undo it with Restore(Before))
 	Skipped []string  // plain-English notes about what was left alone
 }
 
 // Restore puts the repository back to s. It snapshots the current state first, so the restore
-// itself can be undone. Refs changed since the command ran are left alone and reported.
-func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
+// itself can be undone. Refs changed since the command ran, and stashes made since, are left
+// alone and reported. If the branch HEAD goes back to is left alone, HEAD, the index and the
+// files are too.
+func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 	res := &Result{}
 
 	// Check everything we need still exists before touching anything.
@@ -321,10 +416,19 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 		}
 	}
 	res.Before = cur
+	// Record the refs this restore leaves, even if it fails partway, so a redo leaves alone
+	// refs changed after it.
+	defer func() {
+		if ferr := Finish(r, cur); ferr != nil {
+			err = errors.Join(err, ferr)
+		}
+	}()
 
-	// 1. Refs: one transaction, so a failure here changes nothing.
+	// 1. Refs: deletes, then updates, each one transaction. If the updates fail, the deleted refs
+	// are put back, so a failure here changes nothing.
 	elsewhere := checkedOutElsewhere(r)
-	var tx strings.Builder
+	var dels, ups, undel strings.Builder
+	skipped := map[string]bool{}
 	names := map[string]bool{}
 	for n := range s.Refs {
 		names[n] = true
@@ -347,97 +451,67 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 		if s.After != nil {
 			if after, ok := s.After[name]; after != now || ok != has {
 				res.Skipped = append(res.Skipped, short+" changed after this action, so it was left as is")
+				skipped[name] = true
 				continue
 			}
 		}
 		if elsewhere[name] {
 			res.Skipped = append(res.Skipped, short+" is checked out in another worktree, so it was left as is")
+			skipped[name] = true
 			continue
 		}
 		if had && missing[want] {
 			res.Skipped = append(res.Skipped, short+" can't go back: its old commits are gone")
+			skipped[name] = true
 			continue
 		}
-		if had {
-			fmt.Fprintf(&tx, "update %s %s\n", name, want)
-		} else {
-			fmt.Fprintf(&tx, "delete %s\n", name)
+		switch {
+		case !had:
+			// Deleted first, in its own transaction: "foo" can't be written while "foo/bar" exists.
+			fmt.Fprintf(&dels, "delete %s %s\n", name, now)
+			fmt.Fprintf(&undel, "create %s %s\n", name, now)
+		case has:
+			fmt.Fprintf(&ups, "update %s %s %s\n", name, want, now) // update keeps the reflog
+		default:
+			fmt.Fprintf(&ups, "create %s %s\n", name, want)
 		}
 	}
-	if tx.Len() > 0 {
-		if _, err := r.OutputIn(strings.NewReader(tx.String()), "update-ref", "--no-deref", "--stdin"); err != nil {
-			return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
+	if err := updateRefs(r, dels.String()); err != nil {
+		return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
+	}
+	if err := updateRefs(r, ups.String()); err != nil {
+		if uerr := updateRefs(r, undel.String()); uerr != nil {
+			return res, fmt.Errorf("restoring branches failed and some branches were deleted: %w", errors.Join(err, uerr))
 		}
+		return res, fmt.Errorf("restoring branches (nothing was changed): %w", err)
 	}
 
-	// 2. HEAD.
-	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok {
-		_, err = r.Output("symbolic-ref", "HEAD", ref)
-	} else {
-		_, err = r.Output("update-ref", "--no-deref", "HEAD", s.Head)
-	}
-	if err != nil {
-		return res, fmt.Errorf("restoring HEAD: %w", err)
+	// 2-5. HEAD, files, index and operation state, unless the branch HEAD goes back to was left
+	// alone: old files under a newer commit, or a branch checked out twice, would be wrong.
+	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok && (skipped[ref] || elsewhere[ref]) {
+		res.Skipped = append(res.Skipped, "HEAD, the index and your files were left as they are, because "+shortRef(ref)+" was left as is")
+	} else if err := restoreCheckout(r, s, cur); err != nil {
+		return res, fmt.Errorf("%w\nThe undo is only partly done. Run \"gitwhy undo\" again to go back to how things were before it", err)
 	}
 
-	// 3. Working files: delete files added since, rewrite files that differ.
-	if err := restoreFiles(r, s.Work, cur.Work); err != nil {
-		return res, err
-	}
-
-	// 4. Sparse-checkout settings, then the index.
-	for _, f := range sparseFiles {
-		os.Remove(filepath.Join(r.GitDir, f))
-	}
-	for _, f := range s.Files {
-		if err := copyFile(filepath.Join(s.dir, "sparse", f), filepath.Join(r.GitDir, f)); err != nil {
-			return res, err
+	// 6. Stash list. Stashes made after the command ran stay on top of the restored list.
+	var later []Stash
+	if s.After != nil {
+		known := map[string]bool{}
+		for _, st := range append(append([]Stash{}, s.Stashes...), s.StashesAfter...) {
+			known[st.Commit] = true
 		}
-	}
-	for _, k := range sparseKeys {
-		if v := s.Sparse[k]; v != "" {
-			if _, err := r.Output("config", k, v); err != nil {
-				return res, fmt.Errorf("restoring %s: %w", k, err)
-			}
-		} else if r.OK("config", "--get", k) {
-			if _, err := r.Output("config", "--unset", k); err != nil {
-				return res, fmt.Errorf("restoring %s: %w", k, err)
+		for _, st := range cur.Stashes {
+			if !known[st.Commit] {
+				later = append(later, st)
+				res.Skipped = append(res.Skipped, "a stash made after this action ("+st.Message+") was kept")
 			}
 		}
 	}
-	idx := filepath.Join(r.GitDir, "index")
-	if s.HasIdx {
-		if err := copyFile(filepath.Join(s.dir, "index"), idx+".gitwhy-tmp"); err != nil {
-			return res, err
-		}
-		if err := os.Rename(idx+".gitwhy-tmp", idx); err != nil {
-			return res, err
-		}
-		r.Output("update-index", "-q", "--refresh") // refresh stat info; dirty entries are expected
-	} else {
-		os.Remove(idx)
-	}
-	if err := restoreMissing(r, s); err != nil {
-		return res, err
-	}
-
-	// 5. Operation state.
-	for _, f := range stateFiles {
-		if err := os.RemoveAll(filepath.Join(r.GitDir, f)); err != nil {
-			return res, err
-		}
-	}
-	for _, f := range s.State {
-		if err := copyAll(filepath.Join(s.dir, "state", f), filepath.Join(r.GitDir, f)); err != nil {
-			return res, err
-		}
-	}
-
-	// 6. Stash list.
-	if !sameStashes(s.Stashes, cur.Stashes) {
+	if want := append(append([]Stash{}, later...), s.Stashes...); !sameStashes(want, cur.Stashes) {
 		r.Output("update-ref", "-d", "refs/stash")
-		for i := len(s.Stashes) - 1; i >= 0; i-- {
-			st := s.Stashes[i]
+		for i := len(want) - 1; i >= 0; i-- {
+			st := want[i]
 			if missing[st.Commit] {
 				res.Skipped = append(res.Skipped, "a stash ("+st.Message+") can't come back: it's gone")
 				continue
@@ -451,6 +525,85 @@ func Restore(r *git.Repo, s *Snapshot) (*Result, error) {
 	return res, nil
 }
 
+// restoreCheckout puts back HEAD, the working files, sparse-checkout settings, the index and the
+// state of an operation in progress from s. cur is the snapshot of the current state.
+func restoreCheckout(r *git.Repo, s, cur *Snapshot) error {
+	// 2. HEAD.
+	var err error
+	if ref, ok := strings.CutPrefix(s.Head, "ref: "); ok {
+		_, err = r.Output("symbolic-ref", "HEAD", ref)
+	} else {
+		_, err = r.Output("update-ref", "--no-deref", "HEAD", s.Head)
+	}
+	if err != nil {
+		return fmt.Errorf("restoring HEAD: %w", err)
+	}
+
+	// 3. Working files: delete files added since, rewrite files that differ. A file that can't be
+	// changed doesn't stop the rest: the index and state are still put back, then it's reported.
+	fileErr := restoreFiles(r, s.Work, cur.Work)
+
+	// 4. Sparse-checkout settings, then the index.
+	for _, f := range sparseFiles {
+		os.Remove(filepath.Join(r.GitDir, f))
+	}
+	for _, f := range s.Files {
+		if err := copyFile(filepath.Join(s.dir, "sparse", f), filepath.Join(r.GitDir, f)); err != nil {
+			return err
+		}
+	}
+	shared := filepath.Join(r.Common, "config")
+	for _, k := range sparseKeys {
+		if v := s.Sparse[k]; v != "" {
+			if _, err := r.Output("config", "--file", shared, k, v); err != nil {
+				return fmt.Errorf("restoring %s: %w", k, err)
+			}
+		} else if r.OK("config", "--file", shared, "--get", k) {
+			if _, err := r.Output("config", "--file", shared, "--unset", k); err != nil {
+				return fmt.Errorf("restoring %s: %w", k, err)
+			}
+		}
+	}
+	idx := filepath.Join(r.GitDir, "index")
+	if s.HasIdx {
+		if err := copyFile(filepath.Join(s.dir, "index"), idx+".gitwhy-tmp"); err != nil {
+			return err
+		}
+		if err := os.Rename(idx+".gitwhy-tmp", idx); err != nil {
+			return err
+		}
+		r.Output("update-index", "-q", "--refresh") // refresh stat info; dirty entries are expected
+	} else {
+		os.Remove(idx)
+	}
+	if err := restoreMissing(r, s); err != nil {
+		return err
+	}
+
+	// 5. Operation state.
+	for _, f := range stateFiles {
+		if err := os.RemoveAll(filepath.Join(r.GitDir, f)); err != nil {
+			return err
+		}
+	}
+	for _, f := range s.State {
+		if err := copyAll(filepath.Join(s.dir, "state", f), filepath.Join(r.GitDir, f)); err != nil {
+			return err
+		}
+	}
+	return fileErr
+}
+
+// updateRefs runs one all-or-nothing "git update-ref --stdin" transaction, if tx isn't empty.
+func updateRefs(r *git.Repo, tx string) error {
+	if tx == "" {
+		return nil
+	}
+	_, err := r.OutputIn(strings.NewReader(tx), "update-ref", "--no-deref", "--stdin")
+	return err
+}
+
+// shortRef turns a ref name into the name people use: "main", "origin/main" or "tag v1".
 func shortRef(name string) string {
 	for _, p := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
 		if s, ok := strings.CutPrefix(name, p); ok {
@@ -482,6 +635,41 @@ func missingObjects(r *git.Repo, s *Snapshot) map[string]bool {
 	return m
 }
 
+// pins sorts objects to keep alive, with one git process: commits (including the commit each tag
+// points to) can be parents of the working-tree commit; other objects, such as annotated tags,
+// need a ref of their own. Missing objects and repeats are left out.
+func pins(r *git.Repo, ids []string) (commits, others []string) {
+	var in strings.Builder
+	var uniq []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			uniq = append(uniq, id)
+			fmt.Fprintf(&in, "%s\n%s^{commit}\n", id, id)
+		}
+	}
+	if len(uniq) == 0 {
+		return nil, nil
+	}
+	out, _ := r.OutputIn(strings.NewReader(in.String()), "cat-file", "--batch-check=%(objectname) %(objecttype)")
+	lines := strings.Split(out, "\n")
+	parent := map[string]bool{}
+	for i, id := range uniq {
+		if 2*i+1 >= len(lines) {
+			break
+		}
+		if typ := strings.TrimPrefix(lines[2*i], id+" "); typ != "missing" && typ != "commit" {
+			others = append(others, id)
+		}
+		if c, typ, _ := strings.Cut(lines[2*i+1], " "); typ == "commit" && !parent[c] {
+			parent[c] = true
+			commits = append(commits, c)
+		}
+	}
+	return commits, others
+}
+
 // checkedOutElsewhere lists branches checked out in other worktrees.
 func checkedOutElsewhere(r *git.Repo) map[string]bool {
 	out, _ := r.Output("worktree", "list", "--porcelain")
@@ -500,11 +688,12 @@ func checkedOutElsewhere(r *git.Repo) map[string]bool {
 
 // change is one entry of "git diff-tree -r --raw".
 type change struct {
-	oldMode, newMode string
-	status           byte
-	path             string
+	oldMode, newMode string // file modes, such as "100644", or gitlink
+	status           byte   // 'A' added, 'D' deleted, 'M' changed, 'T' type changed (from a to b)
+	path             string // relative to the repository root, with forward slashes
 }
 
+// diffRaw lists the files that differ between the trees of commits a and b.
 func diffRaw(r *git.Repo, a, b string) ([]change, error) {
 	out, err := r.Output("diff-tree", "-r", "-z", "--no-renames", a, b)
 	if err != nil {
@@ -522,8 +711,10 @@ func diffRaw(r *git.Repo, a, b string) ([]change, error) {
 	return cs, nil
 }
 
-const gitlink = "160000" // a submodule or nested repository: never touched by restore
+// gitlink is the file mode of a submodule or nested repository: never touched by restore.
+const gitlink = "160000"
 
+// isGitlink reports whether a change is to a submodule or nested repository.
 func isGitlink(c change) bool { return c.oldMode == gitlink || c.newMode == gitlink }
 
 // hasRepo reports whether a path is or contains a nested repository.
@@ -539,29 +730,63 @@ func hasRepo(full string) bool {
 	return found
 }
 
-// overwrittenUnsaved lists files restore will write over that exist on disk but aren't in the
-// current snapshot (because they're ignored now).
+// overwrittenUnsaved lists files restore will write over or delete that exist on disk but aren't
+// in the current snapshot (because they're ignored now): a file at a path the snapshot needs,
+// ignored files inside a folder at such a path, and a file where one of its folders must go.
 func overwrittenUnsaved(r *git.Repo, want, have string) []string {
 	cs, err := diffRaw(r, want, have)
 	if err != nil {
 		return nil
 	}
-	var out []string
+	var out, dirs []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
 	for _, c := range cs {
-		if c.status == 'D' && !isGitlink(c) {
-			if fi, err := os.Lstat(filepath.Join(r.Top, filepath.FromSlash(c.path))); err == nil && !fi.IsDir() {
-				out = append(out, c.path)
+		if c.status != 'D' || isGitlink(c) {
+			continue
+		}
+		if fi, err := os.Lstat(filepath.Join(r.Top, filepath.FromSlash(c.path))); err == nil {
+			if fi.IsDir() {
+				dirs = append(dirs, c.path)
+			} else {
+				add(c.path)
+			}
+		}
+		for d := path.Dir(c.path); d != "."; d = path.Dir(d) {
+			if fi, err := os.Lstat(filepath.Join(r.Top, filepath.FromSlash(d))); err == nil && !fi.IsDir() {
+				add(d)
+			}
+		}
+	}
+	if len(dirs) > 0 {
+		top := r.Runner
+		top.Dir = r.Top // ls-files prints paths relative to the current folder
+		list, _ := top.Output(append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--"}, dirs...)...)
+		for _, p := range strings.Split(list, "\x00") {
+			if p != "" {
+				add(p)
 			}
 		}
 	}
 	return out
 }
 
+// restoreFiles makes the working files match commit want, given that commit have holds them as
+// they are now: files added since are deleted, the others are written from want. Nested
+// repositories are never touched.
 func restoreFiles(r *git.Repo, want, have string) error {
 	cs, err := diffRaw(r, want, have)
 	if err != nil {
 		return err
 	}
+	// Errors are collected, not returned at once: stopping here would leave files deleted
+	// below and never written back.
+	var errs []error
 	var write []string
 	for _, c := range cs {
 		if isGitlink(c) {
@@ -575,7 +800,8 @@ func restoreFiles(r *git.Repo, want, have string) error {
 				continue
 			}
 			if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+				errs = append(errs, err)
+				continue
 			}
 			removeEmptyParents(r.Top, filepath.Dir(full))
 		default: // changed, deleted or type changed: rewrite from the snapshot
@@ -596,7 +822,7 @@ func restoreFiles(r *git.Repo, want, have string) error {
 			write = append(write, c.path)
 		}
 	}
-	return checkout(r, want, write)
+	return errors.Join(append(errs, checkout(r, want, write))...)
 }
 
 // checkout writes paths from a commit's tree to the working tree, leaving the index alone.
@@ -620,23 +846,35 @@ func checkout(r *git.Repo, commit string, paths []string) error {
 // restoreMissing brings back files the snapshot had that aren't on disk (for example after a
 // sparse checkout hid them), or reapplies sparse checkout if it's on.
 func restoreMissing(r *git.Repo, s *Snapshot) error {
-	if v := s.Sparse["core.sparseCheckout"]; v == "true" {
+	// The settings are already restored, so this reads the value s had, from either file.
+	if v, _ := r.Output("config", "--bool", "--get", "core.sparseCheckout"); v == "true" {
 		r.Output("sparse-checkout", "reapply")
 		return nil
 	}
-	out, err := r.Output("ls-files", "-z", "--deleted", "--", ":/")
+	top := r.Runner
+	top.Dir = r.Top // ls-files lists the current folder; this lists the whole tree
+	out, err := top.Output("ls-files", "-z", "--deleted")
 	if err != nil || out == "" {
 		return nil
 	}
+	saved, err := r.Output("ls-tree", "-r", "-z", "--name-only", s.Work)
+	if err != nil {
+		return err
+	}
+	inWork := map[string]bool{}
+	for _, p := range strings.Split(saved, "\x00") {
+		inWork[p] = true
+	}
 	var paths []string
 	for _, p := range strings.Split(out, "\x00") {
-		if p != "" && r.OK("cat-file", "-e", s.Work+":"+p) {
+		if p != "" && inWork[p] {
 			paths = append(paths, p)
 		}
 	}
 	return checkout(r, s.Work, paths)
 }
 
+// readHead returns "ref: <branch ref>", or the commit ID if HEAD is detached.
 func readHead(r *git.Repo) (string, error) {
 	if ref, err := r.Output("symbolic-ref", "-q", "HEAD"); err == nil {
 		return "ref: " + ref, nil
@@ -662,6 +900,7 @@ func refs(r *git.Repo) (map[string]string, error) {
 	return m, nil
 }
 
+// stashes returns the stash list, newest first.
 func stashes(r *git.Repo) ([]Stash, error) {
 	if !r.OK("rev-parse", "--verify", "-q", "refs/stash") {
 		return nil, nil
@@ -679,6 +918,7 @@ func stashes(r *git.Repo) ([]Stash, error) {
 	return st, nil
 }
 
+// sameStashes reports whether two stash lists hold the same commits in the same order.
 func sameStashes(a, b []Stash) bool {
 	if len(a) != len(b) {
 		return false
@@ -691,6 +931,7 @@ func sameStashes(a, b []Stash) bool {
 	return true
 }
 
+// removeEmptyParents removes dir and its parents while they are empty, stopping at top.
 func removeEmptyParents(top, dir string) {
 	for dir != top && strings.HasPrefix(dir, top) {
 		if os.Remove(dir) != nil {
@@ -700,6 +941,7 @@ func removeEmptyParents(top, dir string) {
 	}
 }
 
+// copyIfExists copies the file or folder src to dst if src exists, and reports whether it did.
 func copyIfExists(src, dst string) (bool, error) {
 	if _, err := os.Lstat(src); err != nil {
 		return false, nil
@@ -707,6 +949,7 @@ func copyIfExists(src, dst string) (bool, error) {
 	return true, copyAll(src, dst)
 }
 
+// copyFile copies the file src to dst, creating dst's folder if needed.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -727,6 +970,7 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
+// copyAll copies the file or folder src to dst, with everything inside it.
 func copyAll(src, dst string) error {
 	return filepath.Walk(src, func(p string, info os.FileInfo, err error) error {
 		if err != nil {

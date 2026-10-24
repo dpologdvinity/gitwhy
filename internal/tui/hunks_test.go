@@ -10,6 +10,7 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// numbered returns n lines "line 1\n"... with line i replaced by edit[i] where set.
 func numbered(n int, edit map[int]string) string {
 	var b strings.Builder
 	for i := 1; i <= n; i++ {
@@ -32,6 +33,8 @@ func twoHunks(t *testing.T) (*testrepo.Repo, *model) {
 	return r, m
 }
 
+// TestHunkModeStagesOneHunk proves that space in the hunk view stages only the selected hunk
+// and the view stays open on the hunk that is left.
 func TestHunkModeStagesOneHunk(t *testing.T) {
 	r, m := twoHunks(t)
 	m.key("enter")
@@ -50,6 +53,8 @@ func TestHunkModeStagesOneHunk(t *testing.T) {
 	}
 }
 
+// TestHunkModeUnstageSide proves that a fully staged file opens on the staged side, space
+// unstages the hunk, and the view closes when nothing is left.
 func TestHunkModeUnstageSide(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", numbered(20, nil))
@@ -70,6 +75,8 @@ func TestHunkModeUnstageSide(t *testing.T) {
 	}
 }
 
+// TestHunkModeUntrackedFile proves that enter on a new file explains to stage it whole instead
+// of opening hunks.
 func TestHunkModeUntrackedFile(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "a.txt", "a\n")
@@ -82,6 +89,8 @@ func TestHunkModeUntrackedFile(t *testing.T) {
 	}
 }
 
+// TestHunkModeQGoesBack proves that q in the hunk view returns to the file list and does not
+// quit the TUI.
 func TestHunkModeQGoesBack(t *testing.T) {
 	_, m := twoHunks(t)
 	m.key("enter")
@@ -94,6 +103,8 @@ func TestHunkModeQGoesBack(t *testing.T) {
 	}
 }
 
+// TestLineModeStagesPickedLine proves that line mode asks for a pick first, then stages only
+// the picked line of a hunk.
 func TestLineModeStagesPickedLine(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", numbered(10, nil))
@@ -116,6 +127,8 @@ func TestLineModeStagesPickedLine(t *testing.T) {
 	}
 }
 
+// TestLineModeRefusesNoNewlineAtEOF proves that line mode is refused for a hunk that touches a
+// missing final newline, where a partial patch would not apply.
 func TestLineModeRefusesNoNewlineAtEOF(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "a\nb")
@@ -129,6 +142,8 @@ func TestLineModeRefusesNoNewlineAtEOF(t *testing.T) {
 	}
 }
 
+// TestHunkModeIgnoresUserDiffConfig proves that hunk staging still works when the user's diff
+// config changes prefixes, colors, blank lines or the diff program.
 func TestHunkModeIgnoresUserDiffConfig(t *testing.T) {
 	for _, cfg := range [][2]string{{"diff.noprefix", "true"}, {"color.diff", "always"}, {"diff.suppressBlankEmpty", "true"}, {"diff.external", "false"}} {
 		t.Run(cfg[0], func(t *testing.T) {
@@ -150,6 +165,8 @@ func TestHunkModeIgnoresUserDiffConfig(t *testing.T) {
 	}
 }
 
+// TestGraphNotLoadedOffCommitsTab proves that the commit graph is loaded only once the Commits
+// tab is shown.
 func TestGraphNotLoadedOffCommitsTab(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("one", "a.txt", "1\n")
@@ -164,6 +181,8 @@ func TestGraphNotLoadedOffCommitsTab(t *testing.T) {
 	}
 }
 
+// TestHunkModeStagedRenameStagesWhole proves that a staged rename does not open hunks (they
+// would show the whole file as new) and says to stage it whole.
 func TestHunkModeStagedRenameStagesWhole(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "old.txt", numbered(20, nil))
@@ -176,6 +195,8 @@ func TestHunkModeStagedRenameStagesWhole(t *testing.T) {
 	}
 }
 
+// TestLineModeRefusedForNewAndDeletedFiles proves that line mode is refused for a file that is
+// entirely added or deleted.
 func TestLineModeRefusedForNewAndDeletedFiles(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "gone.txt", "1\n2\n")
@@ -203,6 +224,8 @@ func TestLineModeRefusedForNewAndDeletedFiles(t *testing.T) {
 	}
 }
 
+// TestLineModeMarksPickedLinesWithCheckbox proves that line mode shows [x] on picked lines and
+// [ ] on the other changed lines.
 func TestLineModeMarksPickedLinesWithCheckbox(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", numbered(10, nil))
@@ -218,6 +241,8 @@ func TestLineModeMarksPickedLinesWithCheckbox(t *testing.T) {
 	}
 }
 
+// TestNextHintsHiddenInHunkMode proves that the "Next:" suggestions, which are about files,
+// are hidden in the hunk view.
 func TestNextHintsHiddenInHunkMode(t *testing.T) {
 	_, m := twoHunks(t)
 	m.w, m.h = 100, 30

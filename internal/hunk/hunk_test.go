@@ -8,6 +8,7 @@ import (
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
+// lines returns n lines "line 1\n" to "line n\n", with line i replaced by edit[i] where set.
 func lines(n int, edit map[int]string) string {
 	var b strings.Builder
 	for i := 1; i <= n; i++ {
@@ -20,7 +21,8 @@ func lines(n int, edit map[int]string) string {
 	return b.String()
 }
 
-// twoEdits commits a 20-line file, then edits lines 2 and 18.
+// twoEdits commits a 20-line file, then edits lines 2 and 18. The edits are far enough apart
+// that git diff shows them as two hunks.
 func twoEdits(t *testing.T) *testrepo.Repo {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", lines(20, nil))
@@ -28,6 +30,7 @@ func twoEdits(t *testing.T) *testrepo.Repo {
 	return r
 }
 
+// parse runs `git diff <args> -- f.txt` in r and parses the output, failing the test on error.
 func parse(t *testing.T, r *testrepo.Repo, args ...string) *FileDiff {
 	t.Helper()
 	out, err := r.OutputIn(nil, append(append([]string{"diff"}, args...), "--", "f.txt")...)
@@ -41,6 +44,8 @@ func parse(t *testing.T, r *testrepo.Repo, args ...string) *FileDiff {
 	return fd
 }
 
+// apply applies patch to r's index the way the TUI does (`git apply --cached --recount`, with
+// -R when reverse), failing the test with the patch shown if git rejects it.
 func apply(t *testing.T, r *testrepo.Repo, patch string, reverse bool) {
 	t.Helper()
 	args := []string{"apply", "--cached", "--recount"}
@@ -52,6 +57,8 @@ func apply(t *testing.T, r *testrepo.Repo, patch string, reverse bool) {
 	}
 }
 
+// TestParseTwoHunks checks that a real git diff splits into its two hunks, keeps the file header
+// and counts each hunk's added and removed lines.
 func TestParseTwoHunks(t *testing.T) {
 	r := twoEdits(t)
 	fd := parse(t, r)
@@ -66,6 +73,8 @@ func TestParseTwoHunks(t *testing.T) {
 	}
 }
 
+// TestPatchWholeHunkStagesOnlyThatHunk checks that staging the first hunk leaves the second one
+// unstaged, which is the point of hunk staging.
 func TestPatchWholeHunkStagesOnlyThatHunk(t *testing.T) {
 	r := twoEdits(t)
 	apply(t, r, parse(t, r).Patch(0, nil, false), false)
@@ -78,6 +87,9 @@ func TestPatchWholeHunkStagesOnlyThatHunk(t *testing.T) {
 	}
 }
 
+// TestPatchLinesForwardKeepsUnselectedDeletions checks line staging: staging only the "+new" line
+// of a changed line keeps the unpicked "-old" line in the index as context, so the index gets
+// both lines rather than losing "old".
 func TestPatchLinesForwardKeepsUnselectedDeletions(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "a\nold\nc\n")
@@ -94,6 +106,8 @@ func TestPatchLinesForwardKeepsUnselectedDeletions(t *testing.T) {
 	}
 }
 
+// TestPatchReverseUnstagesHunk checks that a reverse patch built from `git diff --cached` unstages
+// only the chosen hunk and leaves the other one staged.
 func TestPatchReverseUnstagesHunk(t *testing.T) {
 	r := twoEdits(t)
 	r.Git("add", "f.txt")
@@ -104,6 +118,8 @@ func TestPatchReverseUnstagesHunk(t *testing.T) {
 	}
 }
 
+// TestParseBinaryAndModeOnly checks that binary, mode-only and empty diffs parse without error
+// and give no hunks, so the TUI shows nothing to pick instead of failing.
 func TestParseBinaryAndModeOnly(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "b.bin", "\x00\x01", "f.txt", "x\n")
@@ -118,6 +134,9 @@ func TestParseBinaryAndModeOnly(t *testing.T) {
 	}
 }
 
+// TestPatchReverseWithSelectionUnstagesOnlyPickedLines checks line unstaging: unstaging only the
+// "-2" line puts "2" back in the index while the staged "X" and "Y" stay, so unpicked "+" lines
+// must become context when reversing.
 func TestPatchReverseWithSelectionUnstagesOnlyPickedLines(t *testing.T) {
 	r := testrepo.New(t)
 	r.Commit("base", "f.txt", "1\n2\n4\n")
