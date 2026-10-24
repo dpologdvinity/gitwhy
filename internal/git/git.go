@@ -15,17 +15,18 @@ import (
 
 // Runner runs git in Dir with extra environment variables.
 type Runner struct {
-	Dir string
-	Env []string
+	Dir string   // folder git runs in
+	Env []string // extra "KEY=value" variables, added after the defaults so they win
 }
 
 // Error is a failed git command with its stderr.
 type Error struct {
-	Args   []string
-	Stderr string
-	Err    error
+	Args   []string // the arguments after "git"
+	Stderr string   // what git printed to stderr
+	Err    error    // the underlying error, usually an *exec.ExitError
 }
 
+// Error returns "git <args>: <message>", where the message is stderr if git printed any.
 func (e *Error) Error() string {
 	msg := strings.TrimSpace(e.Stderr)
 	if msg == "" {
@@ -34,8 +35,10 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("git %s: %s", strings.Join(e.Args, " "), msg)
 }
 
+// Unwrap returns the underlying error, so errors.As can find an *exec.ExitError.
 func (e *Error) Unwrap() error { return e.Err }
 
+// cmd builds the git command for args, with the environment every git process gets.
 func (r Runner) cmd(args ...string) *exec.Cmd {
 	c := exec.Command("git", args...)
 	c.Dir = r.Dir
@@ -139,6 +142,7 @@ func ExitCode(err error) int {
 	return -1
 }
 
+// versionRe finds "major.minor" in the output of "git version".
 var versionRe = regexp.MustCompile(`(\d+)\.(\d+)`)
 
 // Version returns git's major and minor version.
