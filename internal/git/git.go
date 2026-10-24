@@ -41,9 +41,28 @@ func (r Runner) cmd(args ...string) *exec.Cmd {
 	c.Dir = r.Dir
 	// Stable, parseable output regardless of the user's locale. File names are literal pathspecs,
 	// so "[ab].txt" never matches a.txt; git refuses literal mixed with the other global settings.
-	c.Env = append(append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1",
+	// git stash runs "git clean ... :/" itself, which literal pathspecs break, so stash keeps
+	// git's normal pathspecs.
+	literal := "1"
+	if subcommand(args) == "stash" {
+		literal = "0"
+	}
+	c.Env = append(append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS="+literal,
 		"GIT_GLOB_PATHSPECS=0", "GIT_NOGLOB_PATHSPECS=0", "GIT_ICASE_PATHSPECS=0"), r.Env...)
 	return c
+}
+
+// subcommand returns the git subcommand in args, skipping global options such as "-c k=v".
+func subcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-c" || a == "-C":
+			i++ // the option's value
+		case !strings.HasPrefix(a, "-"):
+			return a
+		}
+	}
+	return ""
 }
 
 // With returns a copy of r with extra environment variables.

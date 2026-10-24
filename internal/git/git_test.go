@@ -24,3 +24,16 @@ func TestFileNamesAreLiteral(t *testing.T) {
 		t.Fatalf("a.txt = %q, restore of [ab].txt reverted it", got)
 	}
 }
+
+// TestStashIncludesUntrackedFiles proves "stash push --include-untracked" still sets untracked
+// files aside: git stash uses the ":/" pathspec itself, which literal pathspecs break.
+func TestStashIncludesUntrackedFiles(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("one", "a.txt", "1\n")
+	r.Write("a.txt", "2\n")
+	r.Write("new.txt", "n\n")
+	r.Git("stash", "push", "--include-untracked", "-m", "wip")
+	if st := r.Git("status", "--porcelain"); st != "" {
+		t.Fatalf("status = %q, want clean", st)
+	}
+}
