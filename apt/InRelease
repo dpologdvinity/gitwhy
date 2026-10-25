@@ -2,38 +2,38 @@
 Hash: SHA512
 
 Architectures: amd64 arm64
-Date: Sat, 24 Oct 2026 08:54:03 +0000
+Date: Sun, 25 Oct 2026 23:18:25 +0000
 Label: gitwhy
 Origin: gitwhy
 MD5Sum:
- fe8d321c9fb756f64b7a60d0cd41954a             2656 Packages
- b922f7f032c980a717e7a9c3a551108e             1083 Packages.gz
- 454e9e7045dabf81833da26b1835ae82               94 Release
+ 9c198814b9d0c6418e5006a3fa165b1b             3996 Packages
+ 00a62375b69f2f040f4886b60ea10ae1             1463 Packages.gz
+ 5a9cf28d80703936361599bcfef249d8               94 Release
 SHA1:
- 9338b805e9982abfc2f90f355bf409c51112bd8a             2656 Packages
- 16cfbe7a29d49a5cddb698d0658ad9fd74801d37             1083 Packages.gz
- a0993ee907b2c75b8b739f697dfb8fb29b4ae10b               94 Release
+ 955b2941bbc49921e234994e55aa70c82cc04156             3996 Packages
+ 999237bf971dd6d860a8c434119b4e74a53469a7             1463 Packages.gz
+ 8b5bbf15c95c35615d3abd2aecf25f6816d58064               94 Release
 SHA256:
- e1b1f61d718b01020a1d788d180e9a1bccbf6d7e317b943f2d9443b85c44b283             2656 Packages
- df67ec28ff78e1da49057c43abf02a3d9e3553b70b130cf330b057f8690dfec4             1083 Packages.gz
- 6dc8bfdc8d3d11fab69c6306defe91a7af458580a47b7b336d0465e29f163557               94 Release
+ 2c277b69e15a458d650767a26ed7b81db4194d1bee6a549a2de738822341f98a             3996 Packages
+ c55702d1998c412a4c1609ef93e2d0e8bb9f7aedfdac83a3e1daa6dad9b79787             1463 Packages.gz
+ 9fa44f3f13434c3fa20cec85e75bf735d5336648c4bb5e0466a03e510c69dfad               94 Release
 SHA512:
- 4ef1d4f19fdeac34b7d81df403a1773c072869fbea51d01fcf25ac89a6c08a2d97a1161ea6ddd078ca95b8a73784aac7d2a8e63f565bb1ffe5cced4867b8a7d6             2656 Packages
- 26f676882b477f309ceb9e0f5583f852ef6c92c619807dc07c12b874375ec59f66fa298d1ff894606cc71f85324b4c382db75b4c50404e76537d69102969b276             1083 Packages.gz
- 0c28f8d58c1ae86f8f9c1a56fedf7ae85e6b3072a5ac001e393ee1cc0f70061ab3a158394277a02b1422c23b311dcd74c8ae9656de781227097692da384e18e5               94 Release
+ 6b41a0b7adebf5d6396b1ed6edddaba1ef3ce3c9f0f3aeddb495bb52a03fd6ecc34aa55a7bce685c3aaf65e0b6f74ce5f394d961097d92b02ec59180e8d2aebd             3996 Packages
+ d5cd960bc692c9adb5c39dcba9b90fc6e55bf37346f7cafad5f5afff4495bcad8c60bdbef4fee0b17bc8221d1cf8173d61e13e665d6f17fa968394ef18cb51ac             1463 Packages.gz
+ 02e20caa8a20c476868d46b262c81d432858222838c89c3306a3bc312575147e2e8af4f32a2f9d3afad8aa39a0109aa8f2f0d3a3bc595c0426bbb71eb1fdf628               94 Release
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEEu6cgBy2IugyR7vzXvrrA9dm4cmEFAmrccisACgkQvrrA9dm4
-cmGOlg/+KlieEbrgOypYHj1Isdl/T64wygbhVT+qLixBdV+pk62hOMWQY9ivVhDY
-ISeNphgTdrrzDAWvgqLCuAIHMXavnMlCsT99tWEFXx47dbXyzxZRg5cLHbZ9N5Fh
-lFgu59k3RqoFbqDDc/pERqHactqVK9ft7wL8EskMpa3V9dw170NLmv6sadDVTr70
-VSN814mU95AtWQIPfNdCZG1AfSI2YPY3NFEvEoqlMk2aMQBptQ+NJwofPElM72GO
-XvbQswgN1D4Qs+/1rViNcEQntAmnrTq/yhSvMpDaMPmlopbcBw13zMUodVjp+dTA
-AfrKm/MG/qxCY18SsyzEFENpcyCH1+ZSZxYCcybGDiUgWpi9vyOozvF+KMZD+iEM
-EpWREfkL4wRN+I7PlMyeZvEfml1wSANbqJ1ephNN5qbHYVt+bCUoGOkLV3lM7kCl
-vGv8FDHEQJArZnKGpthxsRNa9HEuDt7v5T5XZV14Efnk5IZ5vjT/4+YJzz3DwBX/
-wDGsH4+GGOGLw7DRiQhgvk1t8kit1u2bsL/6pvg2kYieNCfJMavqWSfOaEIRZ41x
-p8ZX2MDGwBbtrJgEDW1qQjMwVLIMZZTWX2Y+kMcB81cZYXzO3R/KjGqbjBc0uQlS
-GZDMGXKZvu9jrT46NLQgLrHrAT0mK8APpmSOOCEHTJbDpcQp4p4=
-=g1aX
+iQIzBAEBCgAdFiEEu6cgBy2IugyR7vzXvrrA9dm4cmEFAmrejkEACgkQvrrA9dm4
+cmEufxAAmAP/fOkvJEjiVRF/xPG7Amu6m6ZuOcywoodBQmEawWiiTUsbt0aljlyW
+OeHyycDe2LjL9tbItEhq4NldZOPRzMOOQnJ5d2NidSKtYK0Ycw+3xBkL26CmSZAs
+6x6JoNC+Q+P9vmm6vKOGosNNOznBSjNcvRmWc0wS2u0RFpQJKfvm8E+NcSJmYZgr
+bWAtJ2c2pSrHQGyuHbjqOCamHhbJuDiQJy2Fx+nwOyfs24EqcHZhr1wTLCKIi3UP
+geHDEZ54gpbGUrEnJCH7LNeLHS+jXZbYMzxMKMyJLNIu4cQQVrJaLXNe0bWpyqNK
+cGHb0S7/4IG2qQ8y/msp83EPPGThtY4ithkHgfTC8JLMCP3FzFHwUnr4M8JqtC9W
+QNdfL0Hm+zPDepPmF5YQFdWF5hn0AA9I9ilXepB6v01Ie31JslumbRVyCwiKaHpl
+sBTgD4LCLMdSyGwopaOrEBoT/Jq/7qW2S/DwGHm4NFiCjBwN9FdmCuv65BxaKbSA
+6Bmawb1yIZtmjkaP8PcmVslHWUIy1yERlaBOSjzk8RmVxKckden7dSel3KCfFTd3
+0FLS2uGFkjY86W9z8jGtSMTJE5qZKc+bX9vgb3xphfPJTjIx9YmSiRn+bzzSheIe
+k0lP69myH16zgkJACXy3j8dpJD0ecTdIphOK6XtQTJO+ZKaClGk=
+=DyDq
 -----END PGP SIGNATURE-----
