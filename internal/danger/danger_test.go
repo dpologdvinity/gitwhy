@@ -171,3 +171,19 @@ func TestCheckoutDashDoesNotWarnAsFile(t *testing.T) {
 		t.Errorf("checkout -: got warnings %q, want none", got)
 	}
 }
+
+// TestPositionalSkipsValueShortFlags checks that values of short options listed in valueShort
+// are not included in Positional.
+func TestPositionalSkipsValueShortFlags(t *testing.T) {
+	a := Parse([]string{"merge", "-m", "merge message", "feature"}, nil)
+	pos := a.Positional()
+	if len(pos) != 1 || pos[0] != "feature" {
+		t.Errorf("merge -m msg feature: got %v, want [feature]", pos)
+	}
+
+	a2 := Parse([]string{"rebase", "-s", "ort", "main"}, nil)
+	pos2 := a2.Positional()
+	if len(pos2) != 1 || pos2[0] != "main" {
+		t.Errorf("rebase -s ort main: got %v, want [main]", pos2)
+	}
+}

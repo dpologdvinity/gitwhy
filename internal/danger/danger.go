@@ -95,21 +95,37 @@ func (a Args) Has(flags ...string) bool {
 	return false
 }
 
-// Positional returns non-flag words (excluding the subcommand), stopping at "--". A value given
-// to a flag as a separate word ("-m msg") is returned too, since Parse does not know which
-// flags take one.
+// Positional returns non-flag words (excluding the subcommand), stopping at "--".
+// Values passed to short flags that take a separate word (e.g. "-m msg") are excluded.
 func (a Args) Positional() []string {
 	var out []string
+	skipNext := false
 	for i, w := range a.Words {
 		if w == "--" {
 			break
 		}
+		if skipNext {
+			skipNext = false
+			continue
+		}
 		if i == 0 && w == a.Sub {
 			continue
 		}
-		if !strings.HasPrefix(w, "-") || w == "-" {
-			out = append(out, w)
+		if strings.HasPrefix(w, "--") {
+			continue
 		}
+		if strings.HasPrefix(w, "-") && w != "-" {
+			for j := 1; j < len(w); j++ {
+				if strings.IndexByte(valueShort[a.Cmd], w[j]) >= 0 {
+					if j == len(w)-1 {
+						skipNext = true
+					}
+					break
+				}
+			}
+			continue
+		}
+		out = append(out, w)
 	}
 	return out
 }
