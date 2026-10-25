@@ -461,19 +461,39 @@ func (a *App) lost() error {
 	if err := prompt(huh.NewInput().Title("Save the file as").Value(&path)); err != nil {
 		return cancelled(err)
 	}
+	full, err := safeRepoPath(a.Repo.Top, path)
+	if err != nil {
+		return err
+	}
 	data, err := a.Repo.OutputIn(nil, "cat-file", "blob", l.ID)
 	if err != nil {
 		return err
 	}
-	full := filepath.Join(a.Repo.Top, path)
 	if _, err := os.Stat(full); err == nil {
 		return fmt.Errorf("%s already exists; pick another name", path)
+	}
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
 	}
 	if err := os.WriteFile(full, []byte(data), 0o644); err != nil {
 		return err
 	}
 	say("%s Saved to %s", okStyle.Render("✓"), path)
 	return nil
+}
+
+// safeRepoPath ensures path is a relative path resolving strictly inside top.
+func safeRepoPath(top, path string) (string, error) {
+	path = filepath.Clean(path)
+	if filepath.IsAbs(path) {
+		return "", fmt.Errorf("path must be inside repository: %s", path)
+	}
+	full := filepath.Join(top, path)
+	rel, err := filepath.Rel(top, full)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
+		return "", fmt.Errorf("path must be inside repository: %s", path)
+	}
+	return full, nil
 }
 
 // contains reports whether xs has x.

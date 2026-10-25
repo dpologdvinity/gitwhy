@@ -22,3 +22,24 @@ func TestTypedRunnerGlobs(t *testing.T) {
 		t.Errorf("recipe step: ls-files '*.txt' = %q, want nothing (literal)", out)
 	}
 }
+
+func TestSafeRepoPath(t *testing.T) {
+	top := "/path/to/repo"
+	tests := []struct {
+		input   string
+		wantErr bool
+	}{
+		{"safe.txt", false},
+		{"sub/dir/safe.txt", false},
+		{"../escape.txt", true},
+		{"../../etc/passwd", true},
+		{"/abs/path/file.txt", true},
+		{".", true},
+	}
+	for _, tt := range tests {
+		full, err := safeRepoPath(top, tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("safeRepoPath(%q): got err=%v, wantErr=%v (full=%q)", tt.input, err, tt.wantErr, full)
+		}
+	}
+}
