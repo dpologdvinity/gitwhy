@@ -157,3 +157,17 @@ func TestPositionalIncludesSingleDash(t *testing.T) {
 		t.Errorf("Positional: got %v, want [-]", pos)
 	}
 }
+
+// TestCheckoutDashDoesNotWarnAsFile checks that `git checkout -` resolves "-" as `@{-1}`
+// rather than warning that a file named "-" is being overwritten.
+func TestCheckoutDashDoesNotWarnAsFile(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("first", "a.txt", "1\n")
+	r.Git("checkout", "-b", "feat")
+	r.Commit("second", "b.txt", "2\n")
+
+	got := WarningsIn(r.Repo, []string{"checkout", "-"})
+	if len(got) != 0 {
+		t.Errorf("checkout -: got warnings %q, want none", got)
+	}
+}

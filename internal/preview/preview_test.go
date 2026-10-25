@@ -268,3 +268,25 @@ func TestPushDeleteRefspecIsNotAnUpload(t *testing.T) {
 		t.Fatalf("a delete refspec should be described as a delete:\n%s", s)
 	}
 }
+
+// TestLoneDashRevisionResolves checks that `switch -` and `reset -` resolve "-" as @{-1}.
+func TestLoneDashRevisionResolves(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("first", "a.txt", "1\n")
+	r.Git("checkout", "-b", "feat")
+	r.Commit("second", "b.txt", "2\n")
+
+	got := Preview(r.Repo, []string{"switch", "-"})
+	if !got.Exact {
+		t.Fatalf("switch -: expected exact preview, got: %+v", got)
+	}
+	s := text(got)
+	if !strings.Contains(s, "first") {
+		t.Errorf("switch - preview text missing target commit subject: %s", s)
+	}
+
+	gotReset := Preview(r.Repo, []string{"reset", "-"})
+	if len(gotReset.Lines) == 0 {
+		t.Fatalf("reset -: expected preview lines, got empty")
+	}
+}

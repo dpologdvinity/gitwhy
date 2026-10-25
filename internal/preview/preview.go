@@ -95,6 +95,14 @@ func Preview(repo *git.Repo, args []string) Result {
 	return Result{}
 }
 
+// normalizeRev maps the lone dash shorthand "-" to "@{-1}" so revision dereferencing works.
+func normalizeRev(rev string) string {
+	if rev == "-" {
+		return "@{-1}"
+	}
+	return rev
+}
+
 // short returns the abbreviated commit ID of rev, or rev itself if git cannot resolve it.
 func short(repo *git.Repo, rev string) string {
 	out, err := repo.Output("rev-parse", "--short", rev)
@@ -180,7 +188,7 @@ func reset(repo *git.Repo, a danger.Args) Result {
 	target := "HEAD"
 	// The first positional is the commit; any more are paths given without "--".
 	if len(pos) > 0 {
-		target = pos[0]
+		target = normalizeRev(pos[0])
 		paths = append(paths, pos[1:]...)
 	}
 	if len(paths) > 0 || a.Has("-p", "--patch") {
@@ -328,6 +336,7 @@ func mergeOptionsOf(repo *git.Repo, a danger.Args) mergeOptions {
 // merge previews "git merge <from>": already up to date, a fast-forward, a refused --ff-only, or
 // a real merge simulated with merge-tree to find conflicts.
 func merge(repo *git.Repo, from string, o mergeOptions) Result {
+	from = normalizeRev(from)
 	if !repo.OK("rev-parse", "--verify", "-q", from+"^{commit}") {
 		return Result{}
 	}
@@ -429,6 +438,7 @@ func reportSim(r *Result, repo *git.Repo, at string, files []string) {
 // rebase previews "git rebase <upstream>": the commits replayed and, unless the rebase is
 // interactive, whether replaying them onto upstream would conflict.
 func rebase(repo *git.Repo, upstream string, interactive bool) Result {
+	upstream = normalizeRev(upstream)
 	if !repo.OK("rev-parse", "--verify", "-q", upstream+"^{commit}") {
 		return Result{}
 	}
@@ -459,7 +469,7 @@ func cherryPick(repo *git.Repo, revs []string) Result {
 	for _, rev := range revs {
 		if strings.Contains(rev, "..") {
 			list = append(list, revList(repo, rev)...)
-		} else if id, err := repo.Output("rev-parse", "--verify", "-q", rev+"^{commit}"); err == nil {
+		} else if id, err := repo.Output("rev-parse", "--verify", "-q", normalizeRev(rev)+"^{commit}"); err == nil {
 			list = append(list, id)
 		} else {
 			return Result{}
@@ -489,6 +499,7 @@ func cherryPick(repo *git.Repo, revs []string) Result {
 // revert previews "git revert <rev>" for one commit and simulates whether undoing it on top of
 // HEAD would conflict.
 func revert(repo *git.Repo, rev string) Result {
+	rev = normalizeRev(rev)
 	id, err := repo.Output("rev-parse", "--verify", "-q", rev+"^{commit}")
 	// A root commit has no parent to revert to, so it gets no preview.
 	if err != nil || !repo.OK("rev-parse", "--verify", "-q", id+"^") {
@@ -530,7 +541,7 @@ func branch(repo *git.Repo, a danger.Args) Result {
 		// "branch -f <name> [<start>]": the start point defaults to HEAD.
 		target := "HEAD"
 		if len(pos) > 1 {
-			target = pos[1]
+			target = normalizeRev(pos[1])
 		}
 		b := "refs/heads/" + pos[0]
 		if !repo.OK("show-ref", "--verify", "-q", b) {
@@ -607,7 +618,7 @@ func switchBranch(repo *git.Repo, a danger.Args) Result {
 	if len(pos) != 1 || a.Has("-c", "-C", "-b", "-B", "--orphan") {
 		return Result{}
 	}
-	target := pos[0]
+	target := normalizeRev(pos[0])
 	if !repo.OK("rev-parse", "--verify", "-q", target+"^{commit}") {
 		// No local branch by that name: git creates one from a remote branch of the same name.
 		// Only origin is checked here.

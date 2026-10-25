@@ -313,7 +313,11 @@ func WarningsIn(repo *git.Repo, args []string) []string {
 // namesARef reports whether x is something "git checkout x" would switch to: a commit, branch or
 // tag, or a remote-only branch that git would create locally.
 func namesARef(repo *git.Repo, x string) bool {
-	if repo.OK("rev-parse", "--verify", "-q", x+"^{commit}") {
+	target := x
+	if target == "-" {
+		target = "@{-1}"
+	}
+	if repo.OK("rev-parse", "--verify", "-q", target+"^{commit}") {
 		return true
 	}
 	refs, err := repo.Output("for-each-ref", "--format=%(refname)", "refs/remotes")
