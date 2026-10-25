@@ -33,7 +33,7 @@ No AI, no account, no network: one binary that runs the real `git`.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh   # install (other ways below)
+curl -fsSL https://dpologdvinity.github.io/gitwhy/install.sh | sh   # install (other ways below)
 cd your-repo
 gitwhy                                  # full-screen home: changes, commits, branches, next steps
 gitwhy undo last commit                 # say what you want; it asks only what it needs
@@ -83,7 +83,7 @@ Needs git 2.40+. Tested on Linux, WSL and Windows (CI). macOS installs and runs 
 ### Linux and macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
+curl -fsSL https://dpologdvinity.github.io/gitwhy/install.sh | sh
 ```
 
 This downloads the latest [release](https://github.com/dpologdvinity/gitwhy/releases), checks its
@@ -128,7 +128,7 @@ scoop install gitwhy
 Or with PowerShell (no Scoop needed):
 
 ```powershell
-irm https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.ps1 | iex
+irm https://dpologdvinity.github.io/gitwhy/install.ps1 | iex
 ```
 
 Or download the zip from the [releases](https://github.com/dpologdvinity/gitwhy/releases) page.
