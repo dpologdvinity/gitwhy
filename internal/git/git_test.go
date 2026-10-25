@@ -3,6 +3,7 @@ package git_test
 import (
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,5 +61,23 @@ func TestStreamJoinsErrors(t *testing.T) {
 	var gitErr *git.Error
 	if !errors.As(err, &gitErr) {
 		t.Errorf("expected joined error to contain *git.Error, got: %v", err)
+	}
+}
+
+// TestOpenPathsAreCleaned checks that Top, GitDir, and Common are cleaned with filepath.Clean.
+func TestOpenPathsAreCleaned(t *testing.T) {
+	r := testrepo.New(t)
+	repo, err := git.Open(r.Dir)
+	if err != nil {
+		t.Fatalf("git.Open failed: %v", err)
+	}
+	if repo.Top != filepath.Clean(repo.Top) {
+		t.Errorf("Top not cleaned: %q", repo.Top)
+	}
+	if repo.GitDir != filepath.Clean(repo.GitDir) {
+		t.Errorf("GitDir not cleaned: %q", repo.GitDir)
+	}
+	if repo.Common != filepath.Clean(repo.Common) {
+		t.Errorf("Common not cleaned: %q", repo.Common)
 	}
 }

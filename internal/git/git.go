@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -183,5 +184,8 @@ func Open(dir string) (*Repo, error) {
 	if len(parts) != 3 {
 		return nil, fmt.Errorf("not a working tree (bare repo?)")
 	}
-	return &Repo{Runner: Runner{Dir: parts[0]}, Top: parts[0], GitDir: parts[1], Common: parts[2]}, nil
+	top := filepath.Clean(parts[0])
+	gitDir := filepath.Clean(parts[1])
+	common := filepath.Clean(parts[2])
+	return &Repo{Runner: Runner{Dir: top}, Top: top, GitDir: gitDir, Common: common}, nil
 }
