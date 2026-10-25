@@ -63,8 +63,11 @@ func main() {
 // are a search query.
 func run(args []string) error {
 	// git runs us as the rebase sequence editor: gitwhy __todo <plan> <todo-file>.
-	if len(args) == 3 && args[0] == "__todo" {
-		return todo.Apply(args[1], args[2])
+	if len(args) >= 1 && args[0] == "__todo" {
+		if len(args) == 3 {
+			return todo.Apply(args[1], args[2])
+		}
+		return fmt.Errorf("usage: gitwhy __todo <plan> <todo-file>")
 	}
 	// The shell hook calls these around every git command, so they skip checkGit and docs loading.
 	if len(args) >= 1 && args[0] == "__pre" {
@@ -72,9 +75,11 @@ func run(args []string) error {
 		fmt.Print(hook.Pre(wd, args[1:]))
 		return nil
 	}
-	if len(args) == 2 && args[0] == "__post" {
-		wd, _ := os.Getwd()
-		hook.Post(wd, args[1])
+	if len(args) >= 1 && args[0] == "__post" {
+		if len(args) == 2 {
+			wd, _ := os.Getwd()
+			hook.Post(wd, args[1])
+		}
 		return nil
 	}
 	if len(args) >= 2 && args[0] == "hook" {

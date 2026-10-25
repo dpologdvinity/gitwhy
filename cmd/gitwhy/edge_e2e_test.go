@@ -99,3 +99,13 @@ func TestUndoWarnsWhenTheAfterStateWasNeverRecorded(t *testing.T) {
 	}
 	expect(t, "undo still restores the edit", r.read("f1.txt"), "dirty\n", out)
 }
+
+// TestPostWithoutTokenDoesNotSearch checks that invoking `__post` with no token returns silently
+// instead of falling through to natural language search.
+func TestPostWithoutTokenDoesNotSearch(t *testing.T) {
+	r := newRepo(t)
+	out := drive(t, r.dir, []string{"__post"})
+	if strings.Contains(out, "Recipes") || strings.Contains(out, "Commands") {
+		t.Fatalf("__post without token fell through to search:\n%s", out)
+	}
+}
