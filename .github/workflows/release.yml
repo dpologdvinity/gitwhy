@@ -6,7 +6,7 @@
 #   release  - goreleaser builds and publishes the GitHub release, the Homebrew cask and Scoop
 #              manifest, and (with a token) opens the winget PR
 #   repos    - builds the signed apt and dnf repositories from the release packages and pushes
-#              them to the gh-pages branch (served by GitHub Pages)
+#              them, and the installers, to the gh-pages branch (served by GitHub Pages)
 #   npm      - publishes the @kaitlynbassford/gitwhy package, which downloads the release binary
 #
 # verify-install.yml then installs the new release every supported way. Required secrets are
@@ -106,6 +106,8 @@ jobs:
           GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')
           export GPG_KEY_ID
           scripts/build-repos.sh pkgs site
+          # The installers are served from the site too: curl -fsSL https://dpologdvinity.github.io/gitwhy/install.sh | sh
+          cp install.sh install.ps1 site/
           touch site/.nojekyll
       - name: Publish
         run: |

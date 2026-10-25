@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install the latest gitwhy release into ~/.local/bin (or $GITWHY_BIN_DIR).
-# Usage: curl -fsSL https://raw.githubusercontent.com/dpologdvinity/gitwhy/main/install.sh | sh
+# Usage: curl -fsSL https://dpologdvinity.github.io/gitwhy/install.sh | sh
 #
 # Linux and macOS, amd64 or arm64. Downloads the release tar.gz, checks its SHA-256 against the
 # release's checksums.txt, and installs nothing if it does not match. Windows: use install.ps1.
