@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/dpologdvinity/gitwhy"
@@ -187,8 +188,12 @@ func hookCmd(args []string) error {
 		rc := hook.RCPath(shell, home)
 		if args[0] == "uninstall" {
 			changed := false
-			for _, sh := range []string{"bash", "zsh"} {
-				c, err := hook.Uninstall(hook.RCPath(sh, home))
+			paths := []string{hook.RCPath("bash", home), hook.RCPath("zsh", home)}
+			if runtime.GOOS == "darwin" {
+				paths = append(paths, filepath.Join(home, ".bash_profile"))
+			}
+			for _, rc := range paths {
+				c, err := hook.Uninstall(rc)
 				if err != nil {
 					return err
 				}

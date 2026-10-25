@@ -109,7 +109,11 @@ func (r Runner) Stream(stdin io.Reader, read func(stdout io.Reader) error, args 
 	rerr := read(out)
 	_, _ = io.Copy(io.Discard, out) // let git finish writing
 	if err := c.Wait(); err != nil {
-		return &Error{Args: args, Stderr: errb.String(), Err: err}
+		gerr := &Error{Args: args, Stderr: errb.String(), Err: err}
+		if rerr != nil {
+			return errors.Join(rerr, gerr)
+		}
+		return gerr
 	}
 	return rerr
 }

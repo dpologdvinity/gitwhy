@@ -246,14 +246,15 @@ func lostBlobs(repo *git.Repo, ids []string) ([]Lost, error) {
 			}
 			id, size, ok := strings.Cut(strings.TrimSuffix(header, "\n"), " ")
 			n, err := strconv.ParseInt(size, 10, 64)
-			if !ok || err != nil {
+			if !ok || err != nil || n < 0 {
 				continue // "<id> missing": no content follows
 			}
 			head := make([]byte, min(n, titleBytes))
 			if _, err := io.ReadFull(br, head); err != nil {
 				return err
 			}
-			if _, err := br.Discard(int(n-int64(len(head))) + 1); err != nil { // the rest and "\n"
+			rem := n - int64(len(head)) + 1 // the rest and "\n"
+			if _, err := io.CopyN(io.Discard, br, rem); err != nil {
 				return err
 			}
 			first, _, _ := strings.Cut(string(head), "\n")

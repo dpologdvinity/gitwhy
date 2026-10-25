@@ -360,7 +360,7 @@ func (a *App) Undo(pick bool) error {
 	say("Go back to just before %s (%s).", cmdStyle.Render(s.Label), recover.Ago(s.Time))
 	say("%s", dimStyle.Render("Branches, HEAD, staged and unstaged changes, untracked files and stashes are put back."))
 	say("%s", dimStyle.Render("Anything sent to a remote (push) is not undone."))
-	if s.After == nil {
+	if !s.FinishedRecording() {
 		// Without the refs recorded after the command, undo cannot tell the command's changes from
 		// yours, so it puts every branch back, including work done since. This happens when the
 		// shell hook was interrupted before it could record them.

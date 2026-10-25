@@ -147,3 +147,13 @@ func TestFileNamedLikeASubcommandIsStillAFile(t *testing.T) {
 		t.Errorf("stash drop: got %q, want 1 warning (stash still has subcommands)", got)
 	}
 }
+
+// TestPositionalIncludesSingleDash checks that a lone "-" (git revision alias for @{-1})
+// is treated as a positional argument, not a flag.
+func TestPositionalIncludesSingleDash(t *testing.T) {
+	a := Parse([]string{"switch", "-"}, nil)
+	pos := a.Positional()
+	if len(pos) != 1 || pos[0] != "-" {
+		t.Errorf("Positional: got %v, want [-]", pos)
+	}
+}

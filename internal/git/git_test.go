@@ -1,8 +1,12 @@
 package git_test
 
 import (
+	"errors"
+	"io"
+	"strings"
 	"testing"
 
+	"github.com/dpologdvinity/gitwhy/internal/git"
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
 )
 
@@ -35,5 +39,26 @@ func TestStashIncludesUntrackedFiles(t *testing.T) {
 	r.Git("stash", "push", "--include-untracked", "-m", "wip")
 	if st := r.Git("status", "--porcelain"); st != "" {
 		t.Fatalf("status = %q, want clean", st)
+	}
+}
+
+// TestStreamJoinsErrors proves that Stream joins both the read callback error and the process
+// exit error if both fail, so caller error is not swallowed.
+func TestStreamJoinsErrors(t *testing.T) {
+	r := testrepo.New(t)
+	readErr := errors.New("read failed")
+	read := func(stdout io.Reader) error {
+		return readErr
+	}
+	err := r.Stream(strings.NewReader(""), read, "invalid-command-that-fails")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, readErr) {
+		t.Errorf("expected joined error to contain readErr, got: %v", err)
+	}
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Errorf("expected joined error to contain *git.Error, got: %v", err)
 	}
 }

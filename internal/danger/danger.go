@@ -107,7 +107,7 @@ func (a Args) Positional() []string {
 		if i == 0 && w == a.Sub {
 			continue
 		}
-		if !strings.HasPrefix(w, "-") {
+		if !strings.HasPrefix(w, "-") || w == "-" {
 			out = append(out, w)
 		}
 	}

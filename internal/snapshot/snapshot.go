@@ -66,6 +66,9 @@ type Snapshot struct {
 	Sparse  map[string]string `json:"sparse"`   // sparse config key -> value ("" = unset)
 	Files   []string          `json:"files"`    // sparseFiles that existed
 
+	// Finished is true when Finish recorded the after-state (refs and stashes).
+	Finished bool `json:"finished,omitempty"`
+
 	// Refs right after the command ran (see Finish). Undo only reverts refs still at these values.
 	After map[string]string `json:"after,omitempty"`
 	// Stash list right after the command ran (see Finish). Undo keeps stashes made after that.
@@ -225,7 +228,13 @@ func Finish(r *git.Repo, s *Snapshot) error {
 		return err
 	}
 	s.After = after
+	s.Finished = true
 	return s.save()
+}
+
+// FinishedRecording reports whether Finish recorded the after-state (refs and stashes).
+func (s *Snapshot) FinishedRecording() bool {
+	return s.Finished || s.After != nil
 }
 
 // commitEnv gives commit-tree an identity even when the user has none configured.
@@ -451,8 +460,12 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 			continue
 		}
 		short := shortRef(name)
-		if s.After != nil {
-			if after, ok := s.After[name]; after != now || ok != has {
+		if s.FinishedRecording() {
+			afterRefs := s.After
+			if afterRefs == nil {
+				afterRefs = map[string]string{}
+			}
+			if after, ok := afterRefs[name]; after != now || ok != has {
 				res.Skipped = append(res.Skipped, short+" changed after this action, so it was left as is")
 				skipped[name] = true
 				continue
@@ -500,7 +513,7 @@ func Restore(r *git.Repo, s *Snapshot) (_ *Result, err error) {
 
 	// 6. Stash list. Stashes made after the command ran stay on top of the restored list.
 	var later []Stash
-	if s.After != nil {
+	if s.FinishedRecording() {
 		known := map[string]bool{}
 		for _, st := range append(append([]Stash{}, s.Stashes...), s.StashesAfter...) {
 			known[st.Commit] = true

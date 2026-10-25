@@ -245,6 +245,17 @@ func TestRCPath(t *testing.T) {
 	if got := RCPath("bash", "/h"); got != filepath.Join("/h", ".bashrc") {
 		t.Fatalf("bash = %q", got)
 	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".bash_profile"), []byte("# profile"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, ".bashrc")
+	if runtime.GOOS == "darwin" {
+		want = filepath.Join(dir, ".bash_profile")
+	}
+	if got := RCPath("bash", dir); got != want {
+		t.Fatalf("bash with .bash_profile = %q, want %q", got, want)
+	}
 }
 
 // fakeGitwhy puts a gitwhy on PATH that logs each call, so tests can see when the hook spawns it.

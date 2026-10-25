@@ -46,6 +46,9 @@ func New(content fs.FS) (*App, error) {
 		a.Repo, _ = git.Open(wd) // outside a repository Repo stays nil; needRepo reports it
 	}
 	a.Self, _ = os.Executable()
+	if a.Self == "" && len(os.Args) > 0 {
+		a.Self = os.Args[0]
+	}
 	a.Quiet = os.Getenv("GITWHY_EXPLAIN") == "0"
 	return a, nil
 }

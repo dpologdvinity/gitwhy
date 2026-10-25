@@ -308,6 +308,29 @@ func TestRefsChangedLaterAreLeftAlone(t *testing.T) {
 	}
 }
 
+// TestFinishEmptyRepoHasFinishedRecording proves Finish records completion even when the
+// repository has no commits or refs (unborn HEAD), avoiding false interrupted-snapshot warnings.
+func TestFinishEmptyRepoHasFinishedRecording(t *testing.T) {
+	r := testrepo.New(t) // fresh repo, no commits, zero refs
+	s, err := Take(r.Repo, "init", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Finish(r.Repo, s); err != nil {
+		t.Fatal(err)
+	}
+	all, err := List(r.Repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) == 0 {
+		t.Fatal("no snapshots listed")
+	}
+	if !all[0].FinishedRecording() {
+		t.Errorf("expected FinishedRecording to be true on finished snapshot with empty refs")
+	}
+}
+
 // TestSparseCheckoutUndo proves undo of "sparse-checkout set" brings the hidden files back and
 // leaves a clean status.
 func TestSparseCheckoutUndo(t *testing.T) {

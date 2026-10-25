@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -294,10 +295,17 @@ func Uninstall(rcPath string) (changed bool, err error) {
 	return true, os.WriteFile(rcPath, []byte(s[:i]+rest), 0o644)
 }
 
-// RCPath is the startup file the hook goes in: ~/.bashrc, or $ZDOTDIR/.zshrc (default ~/.zshrc).
+// RCPath is the startup file the hook goes in: ~/.bashrc (or ~/.bash_profile on macOS),
+// or $ZDOTDIR/.zshrc (default ~/.zshrc).
 func RCPath(shell, home string) string {
 	if z := os.Getenv("ZDOTDIR"); shell == "zsh" && z != "" {
 		home = z
+	}
+	if runtime.GOOS == "darwin" && shell == "bash" {
+		profile := filepath.Join(home, ".bash_profile")
+		if _, err := os.Stat(profile); err == nil {
+			return profile
+		}
 	}
 	return filepath.Join(home, "."+shell+"rc")
 }
