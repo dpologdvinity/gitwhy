@@ -504,3 +504,15 @@ func TestPreComposesRelativeDashCOptions(t *testing.T) {
 		t.Fatal("Pre did not resolve `-C sub -C ..` to the repository")
 	}
 }
+
+// TestPreAttachedDashCOption checks that -C<dir> attached syntax is parsed correctly.
+func TestPreAttachedDashCOption(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "f.txt", "1\n")
+	r.Write("f.txt", "dirty\n")
+	parent := filepath.Dir(r.Top)
+	base := filepath.Base(r.Top)
+	if id := Pre(parent, []string{"-C" + base, "reset", "--hard"}); id == "" {
+		t.Fatal("Pre did not resolve -C<dir> attached option")
+	}
+}

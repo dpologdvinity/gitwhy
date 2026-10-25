@@ -61,6 +61,14 @@ func splitGlobalOptions(cwd string, args []string) (dir string, rest []string, o
 		switch {
 		case opt == "--git-dir" || opt == "--work-tree" || opt == "--bare":
 			return "", nil, false
+		case strings.HasPrefix(args[i], "-C") && len(args[i]) > 2:
+			next := args[i][2:]
+			if filepath.IsAbs(next) {
+				dir = next
+			} else {
+				dir = filepath.Join(dir, next)
+			}
+			i++
 		case valueGlobal[args[i]]:
 			if i+1 >= len(args) {
 				return "", nil, false
