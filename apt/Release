@@ -1,20 +1,20 @@
 Architectures: amd64 arm64
-Date: Sun, 25 Oct 2026 23:18:25 +0000
+Date: Mon, 26 Oct 2026 03:40:28 +0000
 Label: gitwhy
 Origin: gitwhy
 MD5Sum:
- 9c198814b9d0c6418e5006a3fa165b1b             3996 Packages
- 00a62375b69f2f040f4886b60ea10ae1             1463 Packages.gz
- 5a9cf28d80703936361599bcfef249d8               94 Release
+ c178ac145d0cfc4c1e7aa97de14419df             5336 Packages
+ 5d9026327eac32c9a3ce47d4a03f60fc             1844 Packages.gz
+ 055c41cb6a1ed5e47aa0662040c3596f               94 Release
 SHA1:
- 955b2941bbc49921e234994e55aa70c82cc04156             3996 Packages
- 999237bf971dd6d860a8c434119b4e74a53469a7             1463 Packages.gz
- 8b5bbf15c95c35615d3abd2aecf25f6816d58064               94 Release
+ be55df7699fa1fe64d6bbdd0dbca2c76193c4fc1             5336 Packages
+ 3c94c4b20d7231dd487f287d9910a841753b7adf             1844 Packages.gz
+ b7caea7acb583dae934cea77d9458d89803ef18b               94 Release
 SHA256:
- 2c277b69e15a458d650767a26ed7b81db4194d1bee6a549a2de738822341f98a             3996 Packages
- c55702d1998c412a4c1609ef93e2d0e8bb9f7aedfdac83a3e1daa6dad9b79787             1463 Packages.gz
- 9fa44f3f13434c3fa20cec85e75bf735d5336648c4bb5e0466a03e510c69dfad               94 Release
+ dc3af9d9d12cbd085290e5960aec2e977167dea888eded0bf2e44adb0ccf93f0             5336 Packages
+ 594fc9d19414db07c4c4217b74915ba0238f5d284c14408a9bbeeccb74c416bf             1844 Packages.gz
+ 7f4766b6b8bfa3ea3c5e672b9086f8b195d07041e42b5b2f416568dbd4f7ec7f               94 Release
 SHA512:
- 6b41a0b7adebf5d6396b1ed6edddaba1ef3ce3c9f0f3aeddb495bb52a03fd6ecc34aa55a7bce685c3aaf65e0b6f74ce5f394d961097d92b02ec59180e8d2aebd             3996 Packages
- d5cd960bc692c9adb5c39dcba9b90fc6e55bf37346f7cafad5f5afff4495bcad8c60bdbef4fee0b17bc8221d1cf8173d61e13e665d6f17fa968394ef18cb51ac             1463 Packages.gz
- 02e20caa8a20c476868d46b262c81d432858222838c89c3306a3bc312575147e2e8af4f32a2f9d3afad8aa39a0109aa8f2f0d3a3bc595c0426bbb71eb1fdf628               94 Release
+ 98674db2fc8e6b470e6cb67f175028516c3252dfdceba647699d4778a1571b1dc91ccc2434659b06dfc1ff771d7a8bf3814c0040e3e1bcf78e4017ebf80d2db6             5336 Packages
+ 5902e3eecb1e70e9a9fc1ea538732b9a76a280911efb671436f6c143e6bcdae5c8618ef2fea4fd61951dee4c546551f15fa3353b64ea6b1305facdc48ae075af             1844 Packages.gz
+ 6caa29ad77b2ad697bd15947ece9ab45a3d6adfeed1f8f0c560893d3aefcdc84cb3be288c046cd2e421ced57ca32fded9ae1a660a9e879e85aa68b3c6617cdd1               94 Release
