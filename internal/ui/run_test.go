@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
@@ -24,7 +25,7 @@ func TestTypedRunnerGlobs(t *testing.T) {
 }
 
 func TestSafeRepoPath(t *testing.T) {
-	top := "/path/to/repo"
+	top := filepath.FromSlash("/path/to/repo")
 	tests := []struct {
 		input   string
 		wantErr bool
@@ -34,6 +35,9 @@ func TestSafeRepoPath(t *testing.T) {
 		{"../escape.txt", true},
 		{"../../etc/passwd", true},
 		{"/abs/path/file.txt", true},
+		{"\\abs\\path\\file.txt", true},
+		{"C:\\abs\\path\\file.txt", true},
+		{"C:/abs/path/file.txt", true},
 		{".", true},
 	}
 	for _, tt := range tests {

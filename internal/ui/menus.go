@@ -484,11 +484,15 @@ func (a *App) lost() error {
 
 // safeRepoPath ensures path is a relative path resolving strictly inside top.
 func safeRepoPath(top, path string) (string, error) {
-	path = filepath.Clean(path)
-	if filepath.IsAbs(path) {
+	norm := strings.ReplaceAll(path, "\\", "/")
+	if strings.HasPrefix(norm, "/") || (len(norm) >= 2 && norm[1] == ':') {
 		return "", fmt.Errorf("path must be inside repository: %s", path)
 	}
-	full := filepath.Join(top, path)
+	clean := filepath.Clean(filepath.FromSlash(norm))
+	if filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" {
+		return "", fmt.Errorf("path must be inside repository: %s", path)
+	}
+	full := filepath.Join(top, clean)
 	rel, err := filepath.Rel(top, full)
 	if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
 		return "", fmt.Errorf("path must be inside repository: %s", path)
