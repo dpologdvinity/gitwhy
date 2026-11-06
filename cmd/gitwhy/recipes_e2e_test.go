@@ -89,17 +89,17 @@ func TestSplitCommitCancelledMidway(t *testing.T) {
 	}
 }
 
-// TestFailedBisectAdvice proves that when "git bisect run" fails, gitwhy says to end the bisect
-// with "gitwhy abort", that "gitwhy continue" refuses a bisect, and that abort goes back to the
-// branch. It used to advise "gitwhy continue", which ran the invalid "git bisect --continue".
-func TestFailedBisectAdvice(t *testing.T) {
+// TestFailedBisectEndsTheBisect proves that when "git bisect run" fails, the recipe's last step
+// still ends the bisect, so the user is back on their branch as the recipe promises, and that
+// gitwhy does not list that step as one that did not run.
+func TestFailedBisectEndsTheBisect(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("find-bug-commit", commit("c1"), text("exit 139"), yes)
-	mustSay(t, out, []string{"gitwhy abort"}, []string{"gitwhy continue"})
-	out = drive(t, r.dir, []string{"continue"})
-	mustSay(t, out, []string{"bisect", "gitwhy abort"}, []string{"--continue"})
-	out = drive(t, r.dir, []string{"abort"}, yes)
-	expect(t, "branch after abort", r.git("branch", "--show-current"), "main", out)
+	mustSay(t, out, []string{"git bisect reset"}, []string{"did not run", "gitwhy continue"})
+	expect(t, "branch after a failed bisect", r.git("branch", "--show-current"), "main", out)
+	if r.inProgress() {
+		t.Fatalf("bisect still in progress\n%s", out)
+	}
 }
 
 // TestSquashMergeConflictAdvice proves that a squash merge that stops on conflicts says so and

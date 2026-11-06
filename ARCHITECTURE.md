@@ -272,7 +272,9 @@ predict: A copy of {{.commit}} is added on top of {{.branch}}.
 - **Steps** are git argument lists. Arguments are Go templates over the answers; an argument that
   is just `{{.x}}` expands a list answer into several arguments, so values never go through a
   shell. A step can have `when`, `ask` (ask a question mid-recipe), `fail` (stop before running),
-  `warn`, `env` and `todo` (edit a rebase todo list).
+  `warn`, `env`, `todo` (edit a rebase todo list) and `always` (run even after an earlier step
+  failed, to clean up, such as ending a bisect). `fail` and `warn` are decided before anything
+  runs, so loading a recipe fails if they use an answer that a later `ask` step collects.
 - **Checks** (`internal/recipe/checks.go`) are named situation tests, such as `dirty-tree` or
   `detached-head`. A check can warn, block, or suggest another recipe.
 - **`todo` steps** run `git rebase -i` without an editor. git is told to call

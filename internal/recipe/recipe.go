@@ -71,6 +71,8 @@ type Step struct {
 	Env  []string `yaml:"env"`  // extra environment, e.g. GIT_SEQUENCE_EDITOR=true
 	Todo []Edit   `yaml:"todo"` // for "rebase -i": edits gitwhy applies to the todo list
 	Note string   `yaml:"note"` // shown before this step runs
+	// Always runs the step even after an earlier step failed, to clean up, such as ending a bisect.
+	Always bool `yaml:"always"`
 	// Fail and Warn are decided when the recipe is planned, before anything runs, so they can only
 	// use answers known up front. validate rejects one that uses an answer a later `ask` step
 	// collects.
@@ -234,8 +236,8 @@ var questionTypes = map[string]bool{"choice": true, "confirm": true, "text": tru
 
 // validate reports the first structural mistake in a recipe: missing title, category or steps,
 // an unknown question type, a choice without options, a step that does nothing or asks an
-// unknown question, a fail or warn step that uses an answer asked later, an unknown todo action,
-// or an unknown check name. It runs at load time so a
+// unknown question, an always step without git, a fail or warn step that uses an answer asked
+// later, an unknown todo action, or an unknown check name. It runs at load time so a
 // broken recipe fails the tests instead of failing for a user.
 func (r *Recipe) validate() error {
 	if r.Title == "" || r.Category == "" || len(r.Steps) == 0 {
@@ -257,6 +259,9 @@ func (r *Recipe) validate() error {
 		}
 		if s.Ask == "" && len(s.Git) == 0 && s.Fail == "" && s.Warn == "" {
 			return fmt.Errorf("step needs git, ask, fail or warn")
+		}
+		if s.Always && len(s.Git) == 0 {
+			return fmt.Errorf("an always step needs git")
 		}
 		if s.Fail != "" || s.Warn != "" {
 			for _, id := range answersUsed(s.When + s.Fail + s.Warn) {
