@@ -36,7 +36,8 @@ node --test npm/lib.test.js         # the npm package
 CI (`.github/workflows/ci.yml`) is the authority. On top of the commands above it runs `govulncheck`,
 `actionlint`, `shellcheck`, checks that `go.mod`/`go.sum` are tidy and that `THIRD_PARTY_LICENSES` is up
 to date (`scripts/third-party-licenses.sh` regenerates it), builds every release artifact with goreleaser
-in snapshot mode, and builds the Nix flake. All of it must be green before a merge.
+in snapshot mode, and builds the Nix flake. GitHub code scanning (CodeQL) also runs on every pull
+request. All of it must be green before a merge.
 
 ### Coverage
 
