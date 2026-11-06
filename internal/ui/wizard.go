@@ -212,6 +212,10 @@ func (a *App) ask(q *recipe.Question, ans recipe.Answers) error {
 		if len(opts) == 0 {
 			return fmt.Errorf("this repository has no remotes")
 		}
+		if len(opts) == 1 { // nothing to choose
+			ans[q.ID] = opts[0].Value
+			return nil
+		}
 		err = prompt(huh.NewSelect[string]().Title(title).Options(opts...).Value(&v))
 		ans[q.ID] = v
 	case "todo":

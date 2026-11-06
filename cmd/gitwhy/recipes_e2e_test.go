@@ -172,3 +172,37 @@ func TestSquashNeedsKeptCommitAbove(t *testing.T) {
 		t.Fatalf("rebase left in progress\n%s", out)
 	}
 }
+
+// TestTagRecipesPushToTheChosenRemote proves that the tag recipes ask which remote to use when
+// there are several, and push to or delete from only that one, and ask nothing when there is
+// one. They used to always use the branch's remote (origin).
+func TestTagRecipesPushToTheChosenRemote(t *testing.T) {
+	_, c := withRemote(t)
+	// With one remote there is nothing to choose, so no question is asked.
+	c.git("tag", "v0.1.0")
+	out := c.do("push-tags", yes)
+	if !strings.Contains(c.git("ls-remote", "--tags", "origin"), "refs/tags/v0.1.0") {
+		t.Fatalf("v0.1.0 should be on origin:\n%s", out)
+	}
+
+	backup := t.TempDir()
+	c.git("init", "-q", "--bare", backup)
+	c.git("remote", "add", "backup", backup)
+	onBackup := func() string { return c.git("ls-remote", "--tags", "backup") }
+
+	out = c.do("create-tag", text("v1.0.0"), commit("c4"), text("first release"), text("y"), pick("backup"), yes)
+	if !strings.Contains(onBackup(), "refs/tags/v1.0.0") || strings.Contains(c.git("ls-remote", "--tags", "origin"), "v1.0.0") {
+		t.Fatalf("v1.0.0 should be on backup only:\n%s", out)
+	}
+
+	c.git("tag", "v1.0.1")
+	out = c.do("push-tags", pick("backup"), yes)
+	if !strings.Contains(onBackup(), "refs/tags/v1.0.1") || strings.Contains(c.git("ls-remote", "--tags", "origin"), "v1.0.1") {
+		t.Fatalf("v1.0.1 should be on backup only:\n%s", out)
+	}
+
+	out = c.do("delete-tag", text("v1.0.0"), pick("on the remote"), pick("backup"), yes)
+	if strings.Contains(onBackup(), "refs/tags/v1.0.0") {
+		t.Fatalf("v1.0.0 still on backup:\n%s", out)
+	}
+}
