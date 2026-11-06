@@ -162,7 +162,7 @@ npm publishing works without a token once npm Trusted publishing trusts this rep
 
 ```sh
 npm login
-npm trust github @kaitlynbassford/gitwhy --repo dpologdvinity/gitwhy --file release.yml
+npm trust github @kaitlynbassford/gitwhy --repo dpologdvinity/gitwhy --file release.yml --allow-publish
 gh secret delete NPM_TOKEN -R dpologdvinity/gitwhy   # once npmjs.com shows the next version came from the trusted publisher
 ```
 
