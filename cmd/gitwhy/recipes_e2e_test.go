@@ -102,6 +102,18 @@ func TestFailedBisectEndsTheBisect(t *testing.T) {
 	}
 }
 
+// TestBisectContinueAndAbort proves that "gitwhy continue" refuses a bisect started by hand and
+// points to "gitwhy abort", and that abort goes back to the branch. It used to run the invalid
+// "git bisect --continue".
+func TestBisectContinueAndAbort(t *testing.T) {
+	r := newRepo(t)
+	r.git("bisect", "start", "HEAD", "HEAD~2")
+	out := drive(t, r.dir, []string{"continue"})
+	mustSay(t, out, []string{"bisect", "gitwhy abort"}, []string{"--continue"})
+	out = drive(t, r.dir, []string{"abort"}, yes)
+	expect(t, "branch after abort", r.git("branch", "--show-current"), "main", out)
+}
+
 // TestSquashMergeConflictAdvice proves that a squash merge that stops on conflicts says so and
 // lists the commit step that did not run. "git merge --squash" leaves no merge in progress, so
 // gitwhy used to say "Nothing is lost" and never mention the conflicts or the commit.
