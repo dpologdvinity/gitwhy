@@ -321,8 +321,10 @@ that are risky and local, and prints its ID. After git exits, the function calls
 gitwhy is missing or fails.
 
 To stay fast, the generated function has a `case` on the subcommand: only commands that have a
-danger rule (`danger.Commands()`, without `push`) spawn `gitwhy` at all. `Pre` skips global
-options (`-C`, `-c`, `--git-dir`), non-repositories, bare repositories and `GITWHY_HOOK_OFF=1`.
+danger rule (`danger.Commands()`, without `push`) spawn `gitwhy` at all. `Pre` reads past global
+options (`-C <dir>` and `-C<dir>` change the folder, `-c` and `--no-pager` are skipped) and expands
+git aliases. It takes no snapshot for `--git-dir`, `--work-tree` or `--bare` (it cannot tell which
+repository is meant), outside a repository, in a bare repository, or with `GITWHY_HOOK_OFF=1`.
 
 ## Recover
 
@@ -402,5 +404,6 @@ published unless lint, tests and the build pass. Releases run one at a time and 
 - Ignored files are not in snapshots, except those a command is about to delete.
 - Windows has no local test machine: it is tested in CI only.
 - macOS builds and installs in CI but has not been used by hand.
-- The hook understands built-in git commands only, not aliases.
+- The hook follows git aliases but not shell aliases (`!cmd`), and skips commands run with
+  `--git-dir` or `--work-tree`.
 - The Nix build shows a commit hash instead of a version number.
