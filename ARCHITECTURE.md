@@ -320,11 +320,12 @@ that are risky and local, and prints its ID. After git exits, the function calls
 `gitwhy __post <id>`. The function always runs the real git and keeps its exit code, even if
 gitwhy is missing or fails.
 
-To stay fast, the generated function has a `case` on the subcommand: only commands that have a
-danger rule (`danger.Commands()`, without `push`) spawn `gitwhy` at all. `Pre` reads past global
-options (`-C <dir>` and `-C<dir>` change the folder, `-c` and `--no-pager` are skipped) and expands
-git aliases. It takes no snapshot for `--git-dir`, `--work-tree` or `--bare` (it cannot tell which
-repository is meant), outside a repository, in a bare repository, or with `GITWHY_HOOK_OFF=1`.
+To stay fast, the generated function has a `case` on the subcommand: safe built-in commands such as
+`status` and `log` never spawn `gitwhy`. Commands with a danger rule (`danger.Commands()`, except
+`push`) and unknown words, which may be git aliases, do. `Pre` reads past global options (`-C <dir>`
+and `-C<dir>` change the folder, `-c` and `--no-pager` are skipped) and expands git aliases. It
+takes no snapshot for `--git-dir`, `--work-tree` or `--bare` (it cannot tell which repository is
+meant), outside a repository, in a bare repository, or with `GITWHY_HOOK_OFF=1`.
 
 ## Recover
 
