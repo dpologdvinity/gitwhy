@@ -2,6 +2,7 @@
 
 [![ci](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/ci.yml)
 [![release installs verified](https://github.com/dpologdvinity/gitwhy/actions/workflows/verify-install.yml/badge.svg)](https://github.com/dpologdvinity/gitwhy/actions/workflows/verify-install.yml)
+[![CodeQL](https://github.com/dpologdvinity/gitwhy/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/dpologdvinity/gitwhy/security/code-scanning)
 [![latest release](https://img.shields.io/github/v/release/dpologdvinity/gitwhy)](https://github.com/dpologdvinity/gitwhy/releases/latest)
 [![npm](https://img.shields.io/npm/v/@kaitlynbassford/gitwhy)](https://www.npmjs.com/package/@kaitlynbassford/gitwhy)
 [![downloads](https://img.shields.io/github/downloads/dpologdvinity/gitwhy/total)](https://github.com/dpologdvinity/gitwhy/releases)

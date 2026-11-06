@@ -359,7 +359,9 @@ Coverage counts only what `go test` runs in-process. The end-to-end tests run th
 they prove behavior but are not counted: `cmd/gitwhy` and `internal/ui` show 0%. Every third-party
 action is pinned to a full commit SHA and every tool to an exact version; Dependabot proposes the
 updates. `.github/workflows/check-secrets.yml` (manual) checks that the release secrets are set and
-that the Homebrew token can write to the tap.
+that the Homebrew token can write to the tap. GitHub code scanning (CodeQL default setup, managed
+in the repository settings, so there is no workflow file) analyzes the Go code, the workflows, the
+npm package and the Python scripts on every push and pull request to `main` and once a week.
 
 ## Build, release and packaging
 
