@@ -272,7 +272,9 @@ predict: A copy of {{.commit}} is added on top of {{.branch}}.
 - **Steps** are git argument lists. Arguments are Go templates over the answers; an argument that
   is just `{{.x}}` expands a list answer into several arguments, so values never go through a
   shell. A step can have `when`, `ask` (ask a question mid-recipe), `fail` (stop before running),
-  `warn`, `env` and `todo` (edit a rebase todo list).
+  `warn`, `env`, `todo` (edit a rebase todo list) and `always` (run even after an earlier step
+  failed, to clean up, such as ending a bisect). `fail` and `warn` are decided before anything
+  runs, so loading a recipe fails if they use an answer that a later `ask` step collects.
 - **Checks** (`internal/recipe/checks.go`) are named situation tests, such as `dirty-tree` or
   `detached-head`. A check can warn, block, or suggest another recipe.
 - **`todo` steps** run `git rebase -i` without an editor. git is told to call
@@ -318,9 +320,12 @@ that are risky and local, and prints its ID. After git exits, the function calls
 `gitwhy __post <id>`. The function always runs the real git and keeps its exit code, even if
 gitwhy is missing or fails.
 
-To stay fast, the generated function has a `case` on the subcommand: only commands that have a
-danger rule (`danger.Commands()`, without `push`) spawn `gitwhy` at all. `Pre` skips global
-options (`-C`, `-c`, `--git-dir`), non-repositories, bare repositories and `GITWHY_HOOK_OFF=1`.
+To stay fast, the generated function has a `case` on the subcommand: safe built-in commands such as
+`status` and `log` never spawn `gitwhy`. Commands with a danger rule (`danger.Commands()`, except
+`push`) and unknown words, which may be git aliases, do. `Pre` reads past global options (`-C <dir>`
+and `-C<dir>` change the folder, `-c` and `--no-pager` are skipped) and expands git aliases. It
+takes no snapshot for `--git-dir`, `--work-tree` or `--bare` (it cannot tell which repository is
+meant), outside a repository, in a bare repository, or with `GITWHY_HOOK_OFF=1`.
 
 ## Recover
 
@@ -400,5 +405,6 @@ published unless lint, tests and the build pass. Releases run one at a time and 
 - Ignored files are not in snapshots, except those a command is about to delete.
 - Windows has no local test machine: it is tested in CI only.
 - macOS builds and installs in CI but has not been used by hand.
-- The hook understands built-in git commands only, not aliases.
+- The hook follows git aliases but not shell aliases (`!cmd`), and skips commands run with
+  `--git-dir` or `--work-tree`.
 - The Nix build shows a commit hash instead of a version number.

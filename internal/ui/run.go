@@ -235,6 +235,7 @@ func (a *App) execute(j job) error {
 			q := j.r.Question(s.Ask)
 			if err := a.ask(q, j.ans); err != nil {
 				delete(j.ans, s.Ask) // not answered: show it as <name>
+				a.cleanUp(where, j.steps[i:], j.ans)
 				return a.failed(err, notRun(j.steps[i:], j.ans))
 			}
 			continue
@@ -255,6 +256,7 @@ func (a *App) execute(j job) error {
 			continue
 		}
 		if err := a.runOne(where, s, args, j.ans); err != nil {
+			a.cleanUp(where, j.steps[i+1:], j.ans)
 			return a.failed(err, notRun(j.steps[i+1:], j.ans))
 		}
 	}
@@ -262,13 +264,37 @@ func (a *App) execute(j job) error {
 	return nil
 }
 
+// cleanUp runs the "always" steps left after a recipe stopped part way, such as ending a bisect.
+// A step that cannot run is reported; the advice that follows describes the state it leaves.
+func (a *App) cleanUp(where *git.Repo, steps []recipe.Step, ans recipe.Answers) {
+	for _, s := range steps {
+		if !s.Always {
+			continue
+		}
+		ok, err := recipe.Truthy(s.When, ans)
+		if err != nil || !ok {
+			continue
+		}
+		args, err := recipe.Args(s, ans)
+		if err == nil {
+			err = a.runOne(where, s, args, ans)
+		}
+		if err != nil {
+			warn("The clean-up step did not work: " + firstLine(err.Error()))
+		}
+	}
+}
+
 // notRun lists the commands of the steps that would still have run, for the advice after a
-// recipe stops part way. Answers not given yet show as <name>.
+// recipe stops part way. Answers not given yet show as <name>. "always" steps are left out:
+// cleanUp has already run them.
 func notRun(steps []recipe.Step, ans recipe.Answers) [][]string {
 	ps, _, _ := planSteps(steps, ans)
 	var out [][]string
 	for _, p := range ps {
-		out = append(out, p.args)
+		if !p.step.Always {
+			out = append(out, p.args)
+		}
 	}
 	return out
 }

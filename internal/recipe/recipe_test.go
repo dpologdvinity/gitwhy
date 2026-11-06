@@ -186,3 +186,34 @@ func TestPredictsDoNotPrintListsAsBrackets(t *testing.T) {
 	}
 	t.Fatal("no sparse-checkout recipe")
 }
+
+// TestValidateRejectsFailOnLaterAnswer proves that a "fail" or "warn" step cannot depend on an
+// answer a later "ask" step collects. Those steps are decided before anything runs, when that
+// answer does not exist yet, so the step would be skipped without a word.
+func TestValidateRejectsFailOnLaterAnswer(t *testing.T) {
+	later := func(s Step) *Recipe {
+		return &Recipe{ID: "x", Title: "x", Category: "x",
+			Questions: []Question{{ID: "first", Type: "text"}, {ID: "late", Type: "text"}},
+			Steps:     []Step{{Git: []string{"status"}}, {Ask: "late"}, s}}
+	}
+	for _, s := range []Step{
+		{When: `{{eq .late "y"}}`, Fail: "stop"},
+		{When: `{{.first}}`, Warn: "careful with {{.late}}"},
+	} {
+		if err := later(s).validate(); err == nil {
+			t.Errorf("step %+v: want an error, got none", s)
+		}
+	}
+	if err := later(Step{When: `{{eq .first "y"}}`, Fail: "stop"}).validate(); err != nil {
+		t.Errorf("an upfront answer must be allowed: %v", err)
+	}
+}
+
+// TestAnswersUsedFindsMultiLineActions proves that an answer used in an action that spans lines
+// is found, so validate cannot miss it.
+func TestAnswersUsedFindsMultiLineActions(t *testing.T) {
+	got := answersUsed("{{if and\n  .first\n  .late}}x{{end}}")
+	if !reflect.DeepEqual(got, []string{"first", "late"}) {
+		t.Fatalf("got %q", got)
+	}
+}

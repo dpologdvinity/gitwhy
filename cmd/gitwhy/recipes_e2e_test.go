@@ -89,14 +89,26 @@ func TestSplitCommitCancelledMidway(t *testing.T) {
 	}
 }
 
-// TestFailedBisectAdvice proves that when "git bisect run" fails, gitwhy says to end the bisect
-// with "gitwhy abort", that "gitwhy continue" refuses a bisect, and that abort goes back to the
-// branch. It used to advise "gitwhy continue", which ran the invalid "git bisect --continue".
-func TestFailedBisectAdvice(t *testing.T) {
+// TestFailedBisectEndsTheBisect proves that when "git bisect run" fails, the recipe's last step
+// still ends the bisect, so the user is back on their branch as the recipe promises, and that
+// gitwhy does not list that step as one that did not run.
+func TestFailedBisectEndsTheBisect(t *testing.T) {
 	r := newRepo(t)
 	out := r.do("find-bug-commit", commit("c1"), text("exit 139"), yes)
-	mustSay(t, out, []string{"gitwhy abort"}, []string{"gitwhy continue"})
-	out = drive(t, r.dir, []string{"continue"})
+	mustSay(t, out, []string{"git bisect reset"}, []string{"did not run", "gitwhy continue"})
+	expect(t, "branch after a failed bisect", r.git("branch", "--show-current"), "main", out)
+	if r.inProgress() {
+		t.Fatalf("bisect still in progress\n%s", out)
+	}
+}
+
+// TestBisectContinueAndAbort proves that "gitwhy continue" refuses a bisect started by hand and
+// points to "gitwhy abort", and that abort goes back to the branch. It used to run the invalid
+// "git bisect --continue".
+func TestBisectContinueAndAbort(t *testing.T) {
+	r := newRepo(t)
+	r.git("bisect", "start", "HEAD", "HEAD~2")
+	out := drive(t, r.dir, []string{"continue"})
 	mustSay(t, out, []string{"bisect", "gitwhy abort"}, []string{"--continue"})
 	out = drive(t, r.dir, []string{"abort"}, yes)
 	expect(t, "branch after abort", r.git("branch", "--show-current"), "main", out)
@@ -170,5 +182,39 @@ func TestSquashNeedsKeptCommitAbove(t *testing.T) {
 	expect(t, "subjects", r.subjects(), "c4\nc3\nc1", out)
 	if r.inProgress() {
 		t.Fatalf("rebase left in progress\n%s", out)
+	}
+}
+
+// TestTagRecipesPushToTheChosenRemote proves that the tag recipes ask which remote to use when
+// there are several, and push to or delete from only that one, and ask nothing when there is
+// one. They used to always use the branch's remote (origin).
+func TestTagRecipesPushToTheChosenRemote(t *testing.T) {
+	_, c := withRemote(t)
+	// With one remote there is nothing to choose, so no question is asked.
+	c.git("tag", "v0.1.0")
+	out := c.do("push-tags", yes)
+	if !strings.Contains(c.git("ls-remote", "--tags", "origin"), "refs/tags/v0.1.0") {
+		t.Fatalf("v0.1.0 should be on origin:\n%s", out)
+	}
+
+	backup := t.TempDir()
+	c.git("init", "-q", "--bare", backup)
+	c.git("remote", "add", "backup", backup)
+	onBackup := func() string { return c.git("ls-remote", "--tags", "backup") }
+
+	out = c.do("create-tag", text("v1.0.0"), commit("c4"), text("first release"), text("y"), pick("backup"), yes)
+	if !strings.Contains(onBackup(), "refs/tags/v1.0.0") || strings.Contains(c.git("ls-remote", "--tags", "origin"), "v1.0.0") {
+		t.Fatalf("v1.0.0 should be on backup only:\n%s", out)
+	}
+
+	c.git("tag", "v1.0.1")
+	out = c.do("push-tags", pick("backup"), yes)
+	if !strings.Contains(onBackup(), "refs/tags/v1.0.1") || strings.Contains(c.git("ls-remote", "--tags", "origin"), "v1.0.1") {
+		t.Fatalf("v1.0.1 should be on backup only:\n%s", out)
+	}
+
+	out = c.do("delete-tag", text("v1.0.0"), pick("on the remote"), pick("backup"), yes)
+	if strings.Contains(onBackup(), "refs/tags/v1.0.0") {
+		t.Fatalf("v1.0.0 still on backup:\n%s", out)
 	}
 }

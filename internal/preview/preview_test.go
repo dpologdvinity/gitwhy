@@ -106,6 +106,21 @@ func TestBranchDeleteShowsOrphanedCommits(t *testing.T) {
 	}
 }
 
+// TestBranchDeleteSeveralCountsCommitsOnlyOnDeletedBranches checks "branch -D a b" when b
+// holds a's commits: a's commits are on no branch once both are gone, so they must be listed.
+func TestBranchDeleteSeveralCountsCommitsOnlyOnDeletedBranches(t *testing.T) {
+	r := testrepo.New(t)
+	r.Commit("base", "a.txt", "1\n")
+	r.Git("switch", "-c", "a")
+	r.Commit("only on a and b", "a.txt", "2\n")
+	r.Git("branch", "b")
+	r.Git("switch", "-")
+	s := text(Preview(r.Repo, []string{"branch", "-D", "a", "b"}))
+	if strings.Contains(s, "All its commits are also on other branches") || !strings.Contains(s, "only on a and b") {
+		t.Fatalf("branch preview:\n%s", s)
+	}
+}
+
 // inDir returns a copy of repo that runs git from the given folder under the repo root, as
 // `gitwhy run` does when the user is inside a subfolder.
 func inDir(r *testrepo.Repo, sub string) *git.Repo {

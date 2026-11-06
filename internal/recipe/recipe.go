@@ -71,9 +71,11 @@ type Step struct {
 	Env  []string `yaml:"env"`  // extra environment, e.g. GIT_SEQUENCE_EDITOR=true
 	Todo []Edit   `yaml:"todo"` // for "rebase -i": edits gitwhy applies to the todo list
 	Note string   `yaml:"note"` // shown before this step runs
-	// Fail and Warn are decided when the recipe is planned, before anything runs, so their `when`
-	// can only use answers known up front, not an answer a later `ask` step collects: by then the
-	// snapshot is taken and earlier steps have run, so the step is skipped instead.
+	// Always runs the step even after an earlier step failed, to clean up, such as ending a bisect.
+	Always bool `yaml:"always"`
+	// Fail and Warn are decided when the recipe is planned, before anything runs, so they can only
+	// use answers known up front. validate rejects one that uses an answer a later `ask` step
+	// collects.
 	Fail string `yaml:"fail"` // with when: stop before anything runs, showing this
 	Warn string `yaml:"warn"` // with when: add this warning to the preview
 }
@@ -212,12 +214,30 @@ func Load(fsys fs.FS) ([]*Recipe, error) {
 	return rs, nil
 }
 
+// actionRe and fieldRe find the answers a template uses: each ".name" inside a {{ }} action.
+var (
+	actionRe = regexp.MustCompile(`(?s){{.*?}}`) // an action may span lines
+	fieldRe  = regexp.MustCompile(`\.([A-Za-z_][A-Za-z0-9_]*)`)
+)
+
+// answersUsed lists the answer names the templates in s refer to, such as "x" for {{.x}}.
+func answersUsed(s string) []string {
+	var ids []string
+	for _, act := range actionRe.FindAllString(s, -1) {
+		for _, m := range fieldRe.FindAllStringSubmatch(act, -1) {
+			ids = append(ids, m[1])
+		}
+	}
+	return ids
+}
+
 // questionTypes is the set of question types the wizard knows how to ask.
 var questionTypes = map[string]bool{"choice": true, "confirm": true, "text": true, "branch": true, "commit": true, "files": true, "remote": true, "todo": true}
 
 // validate reports the first structural mistake in a recipe: missing title, category or steps,
 // an unknown question type, a choice without options, a step that does nothing or asks an
-// unknown question, an unknown todo action, or an unknown check name. It runs at load time so a
+// unknown question, an always step without git, a fail or warn step that uses an answer asked
+// later, an unknown todo action, or an unknown check name. It runs at load time so a
 // broken recipe fails the tests instead of failing for a user.
 func (r *Recipe) validate() error {
 	if r.Title == "" || r.Category == "" || len(r.Steps) == 0 {
@@ -239,6 +259,16 @@ func (r *Recipe) validate() error {
 		}
 		if s.Ask == "" && len(s.Git) == 0 && s.Fail == "" && s.Warn == "" {
 			return fmt.Errorf("step needs git, ask, fail or warn")
+		}
+		if s.Always && len(s.Git) == 0 {
+			return fmt.Errorf("an always step needs git")
+		}
+		if s.Fail != "" || s.Warn != "" {
+			for _, id := range answersUsed(s.When + s.Fail + s.Warn) {
+				if r.AskedLater(id) {
+					return fmt.Errorf("fail/warn step uses %q, which is asked later: it is decided before anything runs", id)
+				}
+			}
 		}
 		for _, e := range s.Todo {
 			switch e.Action {

@@ -522,13 +522,20 @@ func branch(repo *git.Repo, a danger.Args) Result {
 	r := Result{Exact: true}
 	switch {
 	case a.Has("-d", "-D", "--delete") && len(pos) > 0:
+		// Every branch being deleted is left out of the "other branches", so commits that only
+		// the deleted branches share are listed too. --exclude is relative to refs/heads/.
+		not := []string{"--not"}
+		for _, b := range pos {
+			not = append(not, "--exclude="+b)
+		}
+		not = append(not, "--branches", "--remotes", "--tags")
 		for _, b := range pos {
 			ref := "refs/heads/" + b
 			// Names that are not local branches are skipped.
 			if !repo.OK("show-ref", "--verify", "-q", ref) {
 				continue
 			}
-			list, n := commits(repo, ref, "--not", "--exclude="+b, "--branches", "--remotes", "--tags") // --exclude is relative to refs/heads/
+			list, n := commits(repo, append([]string{ref}, not...)...)
 			if n == 0 {
 				r.add("Branch %s is deleted. All its commits are also on other branches.", b)
 			} else {

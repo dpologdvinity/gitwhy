@@ -1,10 +1,12 @@
-# Uploads every local tag that isn't on {{.remote}} yet (the current branch's remote, or origin).
+# Uploads every local tag that isn't on the chosen remote yet. With several remotes it asks which
+# one, starting on the current branch's remote (or origin).
 # Without --force, tags that already exist on the remote are left as they are. A push can't be
 # undone with gitwhy undo.
 title: Push my tags
 aliases: [push tags, upload tags, publish tags]
 category: sync with remote
-questions: []
+questions:
+  - {id: remote, ask: "Push to which remote?", type: remote, default: "{{.remote}}"}
 steps:
   - git: [push, "{{.remote}}", --tags]
 predict: Every local tag not yet on {{.remote}} is uploaded. Existing remote tags aren't changed.
