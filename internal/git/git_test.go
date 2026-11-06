@@ -3,9 +3,12 @@ package git_test
 import (
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dpologdvinity/gitwhy/internal/git"
 	"github.com/dpologdvinity/gitwhy/internal/testrepo"
@@ -79,5 +82,27 @@ func TestOpenPathsAreCleaned(t *testing.T) {
 	}
 	if repo.Common != filepath.Clean(repo.Common) {
 		t.Errorf("Common not cleaned: %q", repo.Common)
+	}
+}
+
+// TestInteractiveSurvivesInterrupt proves that Ctrl-C while git runs in the foreground does not
+// kill gitwhy. The terminal sends the interrupt to git too, which stops on its own; gitwhy must
+// live on to run clean-up steps and record the undo state. It sends the interrupt to the test
+// process only, so without the fix the whole test binary dies. Windows cannot send it this way.
+func TestInteractiveSurvivesInterrupt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Process.Signal(os.Interrupt) is not supported on Windows")
+	}
+	r := testrepo.New(t)
+	self, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = self.Signal(os.Interrupt)
+	}()
+	if err := r.Interactive("-c", "alias.nap=!sleep 1", "nap"); err != nil {
+		t.Fatalf("git failed: %v", err)
 	}
 }

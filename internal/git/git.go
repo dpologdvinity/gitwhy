@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -126,12 +127,17 @@ func (r Runner) OK(args ...string) bool {
 }
 
 // Interactive runs git attached to the terminal, so editors and pagers work.
-// Stderr is also captured and returned in the error on failure.
+// Stderr is also captured and returned in the error on failure. While git runs, Ctrl-C does not
+// stop gitwhy: the terminal sends it to git as well, which stops on its own, and gitwhy lives on
+// to run clean-up steps and record the result for undo.
 func (r Runner) Interactive(args ...string) error {
 	c := r.cmd(args...)
 	c.Stdin, c.Stdout = os.Stdin, os.Stdout
 	var errb bytes.Buffer
 	c.Stderr = io.MultiWriter(os.Stderr, &errb)
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	defer signal.Stop(interrupts)
 	if err := c.Run(); err != nil {
 		return &Error{Args: args, Stderr: errb.String(), Err: err}
 	}
