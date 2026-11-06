@@ -154,8 +154,17 @@ Repository secrets the release uses (Settings -> Secrets and variables -> Action
 | `HOMEBREW_TAP_TOKEN` | pushes the Homebrew cask and Scoop manifest to `dpologdvinity/homebrew-gitwhy` (needs Contents read and write on that repository) | yes |
 | `GPG_PRIVATE_KEY` | signs the apt and dnf repositories | yes |
 | `GPG_PASSPHRASE` | unlocks that key | only if the key has a passphrase |
-| `NPM_TOKEN` | publishes `@kaitlynbassford/gitwhy` | yes |
+| `NPM_TOKEN` | publishes `@kaitlynbassford/gitwhy` | only until npm Trusted publishing is set up (see below) |
 | `WINGET_TOKEN` | opens the winget-pkgs pull request | no (the step is skipped without it) |
+
+npm publishing works without a token once npm Trusted publishing trusts this repository's
+`release.yml`. A maintainer with two-factor authentication sets it up once:
+
+```sh
+npm login
+npm trust github @kaitlynbassford/gitwhy --repo dpologdvinity/gitwhy --file release.yml
+gh secret delete NPM_TOKEN -R dpologdvinity/gitwhy   # once npmjs.com shows the next version came from the trusted publisher
+```
 
 Before tagging, run the `check-secrets` workflow from the Actions tab: it reports which secrets are set,
 and checks that the tap token can write to the tap and that the signing key can sign. It never prints a

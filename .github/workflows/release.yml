@@ -125,14 +125,17 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      id-token: write # lets npm record where the package was built (provenance)
+      id-token: write # trusted publishing, and provenance: where the package was built
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Node 24 brings npm 11, which publishes through npm Trusted publishing (OIDC, using the
+      # id-token permission above) when it is set up for this workflow on npmjs.com. Until then, or
+      # if it is ever removed, npm falls back to NPM_TOKEN.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - run: cp LICENSE THIRD_PARTY_LICENSES README.md npm/
       - run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
