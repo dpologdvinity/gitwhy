@@ -208,3 +208,12 @@ func TestValidateRejectsFailOnLaterAnswer(t *testing.T) {
 		t.Errorf("an upfront answer must be allowed: %v", err)
 	}
 }
+
+// TestAnswersUsedFindsMultiLineActions proves that an answer used in an action that spans lines
+// is found, so validate cannot miss it.
+func TestAnswersUsedFindsMultiLineActions(t *testing.T) {
+	got := answersUsed("{{if and\n  .first\n  .late}}x{{end}}")
+	if !reflect.DeepEqual(got, []string{"first", "late"}) {
+		t.Fatalf("got %q", got)
+	}
+}

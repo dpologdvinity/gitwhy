@@ -216,7 +216,7 @@ func Load(fsys fs.FS) ([]*Recipe, error) {
 
 // actionRe and fieldRe find the answers a template uses: each ".name" inside a {{ }} action.
 var (
-	actionRe = regexp.MustCompile(`{{.*?}}`)
+	actionRe = regexp.MustCompile(`(?s){{.*?}}`) // an action may span lines
 	fieldRe  = regexp.MustCompile(`\.([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
