@@ -1,0 +1,18 @@
+# typos config: https://github.com/crate-ci/typos
+[files]
+extend-exclude = [
+  "*.{gif,png,jpg,jpeg,webp,ico,svg,pdf,woff,woff2,ttf}",
+]
+
+[default.extend-words]
+# gpg --with-colons record type "fpr:" (fingerprint) in CI workflows.
+"fpr" = "fpr"
+# "mis-recording": hyphenated prefix.
+"mis" = "mis"
+# Markdown markup splits the word: `T`ype changed.
+"ype" = "ype"
+# Deliberate typo inputs for the fuzzy search tests ("comit", "commti").
+"comit" = "comit"
+"commti" = "commti"
+# Test asserts on a partial substring of "error".
+"rror" = "rror"
