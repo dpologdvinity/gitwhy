@@ -6,6 +6,15 @@
 /npm/README.md
 /npm/THIRD_PARTY_LICENSES
 /npm/*.tgz
-.env
+# Secrets and personal overrides (covers .claude/settings.local.json and CLAUDE.local.md).
+.env*
+!.env.example
+*.local.*
+*.pem
+*.key
+# Agent scratch space: worktrees, brainstorm companion, browser MCP output.
+.worktrees/
+.superpowers/
+.playwright-mcp/
 __pycache__/
 *.pyc
