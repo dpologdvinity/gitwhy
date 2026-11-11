@@ -16,6 +16,7 @@ You need:
 git clone https://github.com/dpologdvinity/gitwhy && cd gitwhy
 go build -o gitwhy ./cmd/gitwhy
 ./gitwhy version
+lefthook install   # optional: pre-commit gitleaks, gofmt, golangci-lint and typos (needs lefthook)
 ```
 
 `go install ...@latest` does not work for this module; see "Vendored clipboard library" in
