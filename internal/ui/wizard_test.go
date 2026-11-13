@@ -102,3 +102,33 @@ func TestRunRecipeWithRejectsAPresetOfTheWrongType(t *testing.T) {
 		t.Fatal("want an error for a non-text commit preset")
 	}
 }
+
+// TestCheckText proves the checks on a typed answer: a required answer can't be blank, and an
+// answer git would read as an option ("--force" as a branch name) is refused, word by word for a
+// split answer, while one used as an option's value, such as a commit message, may start with "-".
+func TestCheckText(t *testing.T) {
+	positional := &recipe.Question{Type: "text", NoLeadingDash: true}
+	split := &recipe.Question{Type: "text", NoLeadingDash: true, Split: true}
+	message := &recipe.Question{Type: "text"}
+	optional := &recipe.Question{Type: "text", Optional: true, NoLeadingDash: true}
+	for _, c := range []struct {
+		q    *recipe.Question
+		in   string
+		fail bool
+	}{
+		{positional, "feature", false},
+		{positional, "--force", true},
+		{positional, "  -d", true},
+		{positional, "a-b", false},
+		{split, "src docs", false},
+		{split, "src -x", true},
+		{message, "-fix the typo", false},
+		{message, " ", true},
+		{optional, "", false},
+		{optional, "-x", true},
+	} {
+		if err := checkText(c.q, c.in); (err != nil) != c.fail {
+			t.Errorf("checkText(%+v, %q) = %v, want fail %v", *c.q, c.in, err, c.fail)
+		}
+	}
+}

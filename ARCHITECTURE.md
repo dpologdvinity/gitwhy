@@ -271,7 +271,8 @@ predict: A copy of {{.commit}} is added on top of {{.branch}}.
   when `ACCESSIBLE=1`.
 - **Steps** are git argument lists. Arguments are Go templates over the answers; an argument that
   is just `{{.x}}` expands a list answer into several arguments, so values never go through a
-  shell. A step can have `when`, `ask` (ask a question mid-recipe), `fail` (stop before running),
+  shell. A `text` answer used that way before `--`, and not as an option's value (`-m`), is
+  refused if it starts with `-`, because git would read it as an option. A step can have `when`, `ask` (ask a question mid-recipe), `fail` (stop before running),
   `warn`, `env`, `todo` (edit a rebase todo list) and `always` (run even after an earlier step
   failed, to clean up, such as ending a bisect). `fail` and `warn` are decided before anything
   runs, so loading a recipe fails if they use an answer that a later `ask` step collects.
