@@ -29,7 +29,7 @@ No AI, no account, no network: one binary that runs the real `git`.
 - **Learn as you go.** Every command it runs is shown and broken down part by part.
 - **Undo anything it ran.** Before running, gitwhy saves branches, staged and unstaged changes, untracked files, stashes, and merge/rebase state. `gitwhy undo` puts it all back, even after `reset --hard` or `clean -fdx`.
 - **Recover from plain git too.** `gitwhy recover` reads git's history of your branch ("2h ago: pulled 14 commits from origin/master") and takes you back to before any of it. It also finds lost commits and staged files git still has.
-- **Every git command and flag.** `gitwhy build` walks you through any command with every flag explained in a few words, from [the docs in this repo](docs/README.md) (181 commands, ~3,500 flags, git 2.56).
+- **Every git command and flag.** `gitwhy build` walks you through any command with every flag explained in a few words, from [the docs in this repo](docs/README.md) (181 commands, ~2,700 flags, git 2.56).
 
 ## Quickstart
 
