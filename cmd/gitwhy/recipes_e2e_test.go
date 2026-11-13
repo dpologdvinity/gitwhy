@@ -218,3 +218,13 @@ func TestTagRecipesPushToTheChosenRemote(t *testing.T) {
 		t.Fatalf("v1.0.0 still on backup:\n%s", out)
 	}
 }
+
+// TestRenameBranchRefusesOptionName proves a typed branch name that starts with "-" is refused
+// and asked again. It used to reach git as an option: "git branch -m main --force" ran with
+// --force as a flag instead of a name.
+func TestRenameBranchRefusesOptionName(t *testing.T) {
+	r := newRepo(t)
+	out := r.do("rename-branch", pick("main"), text("--force"), text("feature"), yes)
+	mustSay(t, out, []string{`"--force" can't start with "-"`}, nil)
+	expect(t, "branches", r.git("branch", "--format=%(refname:short)"), "feature", out)
+}

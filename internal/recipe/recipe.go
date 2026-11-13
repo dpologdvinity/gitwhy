@@ -54,6 +54,9 @@ type Question struct {
 	Multi   bool     `yaml:"multi"`   // pickers: allow several picks; the answer is a []string
 	Partial bool     `yaml:"partial"` // files: must leave at least one file unpicked
 	Actions []string `yaml:"actions"` // todo: allowed actions besides reorder (drop, squash, fixup, reword)
+	// NoLeadingDash is set at load time on a text question that a step passes as a whole
+	// argument, not as an option's value: git would read an answer like "--force" as an option.
+	NoLeadingDash bool `yaml:"-"`
 }
 
 // Option is one choice of a "choice" question.
@@ -204,6 +207,7 @@ func Load(fsys fs.FS) ([]*Recipe, error) {
 		if err := r.validate(); err != nil {
 			return nil, fmt.Errorf("%s: %w", f, err)
 		}
+		r.markLeadingDash()
 		if seen[r.ID] {
 			return nil, fmt.Errorf("%s: duplicate recipe id %q", f, r.ID)
 		}
@@ -212,6 +216,30 @@ func Load(fsys fs.FS) ([]*Recipe, error) {
 	}
 	sort.Slice(rs, func(i, j int) bool { return rs[i].Title < rs[j].Title })
 	return rs, nil
+}
+
+// valueFlags are the step options whose next argument is their value (-m, -L, --path, and the
+// -c of "switch -c" and "sh -c"), so a typed answer there may start with "-", like a message.
+// An option missing here only makes its answer refuse a leading "-", the safe direction.
+var valueFlags = map[string]bool{"-m": true, "-L": true, "--path": true, "-c": true}
+
+// markLeadingDash sets NoLeadingDash on each text question that a step passes alone as one
+// argument ("{{.x}}") before "--", other than right after an option in valueFlags.
+func (r *Recipe) markLeadingDash() {
+	for _, s := range r.Steps {
+		for i, el := range s.Git {
+			if el == "--" {
+				break
+			}
+			m := soloVar.FindStringSubmatch(el)
+			if m == nil || (i > 0 && valueFlags[s.Git[i-1]]) {
+				continue
+			}
+			if q := r.Question(m[1]); q != nil && q.Type == "text" {
+				q.NoLeadingDash = true
+			}
+		}
+	}
 }
 
 // actionRe and fieldRe find the answers a template uses: each ".name" inside a {{ }} action.

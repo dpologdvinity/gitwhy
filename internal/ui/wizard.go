@@ -148,6 +148,27 @@ func (a *App) offer(id string) error {
 	return a.RunRecipe(s)
 }
 
+// checkText reports what is wrong with a typed answer: blank when one is required, or a word
+// starting with "-" where git would read it as an option (see recipe.Question.NoLeadingDash).
+func checkText(q *recipe.Question, s string) error {
+	if !q.Optional && strings.TrimSpace(s) == "" {
+		return fmt.Errorf("required")
+	}
+	if !q.NoLeadingDash {
+		return nil
+	}
+	words := []string{strings.TrimSpace(s)}
+	if q.Split {
+		words = strings.Fields(s)
+	}
+	for _, w := range words {
+		if strings.HasPrefix(w, "-") {
+			return fmt.Errorf("%q can't start with \"-\": git would read it as an option", w)
+		}
+	}
+	return nil
+}
+
 // ask asks one question and stores the answer (plus derived answers) in ans.
 func (a *App) ask(q *recipe.Question, ans recipe.Answers) error {
 	// A question whose "when" is false is answered with "" so templates that use it still render.
@@ -179,16 +200,8 @@ func (a *App) ask(q *recipe.Question, ans recipe.Answers) error {
 		ans[q.ID] = strconv.FormatBool(v)
 	case "text":
 		v := def
-		in := huh.NewInput().Title(title).Description(q.Help).Value(&v)
-		if !q.Optional {
-			in = in.Validate(func(s string) error {
-				if strings.TrimSpace(s) == "" {
-					return fmt.Errorf("required")
-				}
-				return nil
-			})
-		}
-		err = prompt(in)
+		err = prompt(huh.NewInput().Title(title).Description(q.Help).Value(&v).
+			Validate(func(s string) error { return checkText(q, s) }))
 		if q.Split {
 			ans[q.ID] = strings.Fields(v)
 		} else {

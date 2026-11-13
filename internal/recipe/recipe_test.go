@@ -217,3 +217,38 @@ func TestAnswersUsedFindsMultiLineActions(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// TestNoLeadingDash proves which typed answers may not start with "-": those a step passes as a
+// whole argument before "--" that is not an option's value. git would read "--force" given as a
+// new branch name as an option, while a commit message after -m or a path after "--" is safe.
+func TestNoLeadingDash(t *testing.T) {
+	rs, err := Load(os.DirFS("../.."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{
+		"rename-branch/name":           true,  // branch -m <old> <name>
+		"move-commits-new-branch/name": true,  // branch <name>
+		"create-tag/name":              true,  // after the boolean -a
+		"delete-tag/name":              true,  // after the boolean -d
+		"sparse-checkout/dirs":         true,  // a split answer, splatted
+		"worktree-add/dir":             true,  // worktree add <dir>
+		"add-remote/url":               true,  // remote add <name> <url>
+		"commit-staged/message":        false, // the value of -m
+		"new-branch/name":              false, // the value of switch -c
+		"who-changed-line/lines":       false, // the value of -L
+		"find-commit/text":             false, // inside "--grep=..."
+		"rename-file/to":               false, // after "--"
+	}
+	got := map[string]bool{}
+	for _, r := range rs {
+		for _, q := range r.Questions {
+			got[r.ID+"/"+q.ID] = q.NoLeadingDash
+		}
+	}
+	for k, w := range want {
+		if g, ok := got[k]; !ok || g != w {
+			t.Errorf("%s: NoLeadingDash = %v (found %v), want %v", k, g, ok, w)
+		}
+	}
+}

@@ -101,7 +101,10 @@ A recipe is one YAML file in `recipes/`. Copy a similar one (`recipes/copy-commi
 and follow the model in `internal/recipe/recipe.go`. Rules:
 
 - Pass user answers as **separate arguments** (`git: [cherry-pick, "{{.commit}}"]`), never glued
-  into a string, and put `--` before file or branch names that could start with a dash.
+  into a string, and put `--` before file names. A `text` answer passed alone as an argument
+  before `--` must not start with a dash, or git would read it as an option, so the wizard refuses
+  one, unless it follows an option that takes a value (`valueFlags` in `internal/recipe`, such as
+  `-m`). Add an option there if a new recipe passes a typed value after it.
 - Write a `predict` line that says what really happens. If a step cannot be undone, say so.
 - `go test ./internal/recipe/` loads every recipe, and the end-to-end tests in
   `cmd/gitwhy/e2e_test.go` run many of them against a real repository. Add an end-to-end test for
