@@ -1,11 +1,11 @@
 module github.com/dpologdvinity/gitwhy
 
-go 1.26.1
+go 1.26.7
 
 require (
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	charm.land/huh/v2 v2.0.3
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.1.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	gopkg.in/yaml.v3 v3.0.1
 )
